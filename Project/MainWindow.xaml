@@ -3,10 +3,148 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:Project"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        xmlns:WindowsPresentation="clr-namespace:GMap.NET.WindowsPresentation;assembly=GMap.NET.WindowsPresentation"
+        Title="RSSI Antenna Tracker" Height="800" Width="1200" Background="#FF1E1E1E" Loaded="MainWindow_Loaded">
     <Grid>
-        
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="3*"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Map Section -->
+        <Border Grid.Column="0" Background="#FF2D2D2D" Margin="10" CornerRadius="5">
+            <Grid>
+                <WindowsPresentation:GMapControl x:Name="MapControl" 
+                                               Margin="5"
+                                               MinZoom="2" 
+                                               MaxZoom="17" 
+                                               Zoom="13"
+                                               CanDragMap="True"
+                                               MouseWheelZoomType="MousePositionAndCenter"
+                                               MouseWheelZoomEnabled="True"
+                                               MouseDoubleClick="MapControl_MouseDoubleClick"
+                                               MouseLeftButtonDown="MapControl_MouseLeftButtonDown"
+                                               MouseLeftButtonUp="MapControl_MouseLeftButtonUp"
+                                               MouseMove="MapControl_MouseMove"
+                                               MouseWheel="MapControl_MouseWheel"
+                                               ClipToBounds="True"
+                                               Panel.ZIndex="0"/>
+                <Canvas x:Name="MapCanvas" 
+                        Background="Transparent" 
+                        Panel.ZIndex="1"
+                        IsHitTestVisible="False">
+                    <!-- Radar Sweep -->
+                    <Path x:Name="RadarSweep" Fill="#4000FF00" Stroke="#8000FF00" StrokeThickness="2">
+                        <Path.RenderTransform>
+                            <TransformGroup>
+                                <RotateTransform x:Name="radarRotation" Angle="0" CenterX="0" CenterY="0"/>
+                                <TranslateTransform x:Name="radarPosition" X="0" Y="0"/>
+                            </TransformGroup>
+                        </Path.RenderTransform>
+                    </Path>
+                </Canvas>
+            </Grid>
+        </Border>
+
+        <!-- Control Panel -->
+        <Border Grid.Column="1" Background="#FF2D2D2D" Margin="0,10,10,10" CornerRadius="10">
+            <ScrollViewer>
+                <StackPanel Margin="15">
+                    <!-- Connection Status -->
+                    <Border Background="#FF3D3D3D" CornerRadius="5" Padding="10">
+                        <Grid>
+                            <StackPanel>
+                                <TextBlock Text="Connection Status" FontSize="16" Foreground="White"/>
+                                <Grid Margin="0,5">
+                                    <Ellipse x:Name="ConnectionIndicator" Width="12" Height="12" 
+                                            Fill="Red" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="ConnectionStatus" Text="Disconnected" 
+                                             Foreground="White" Margin="20,0,0,0"
+                                             VerticalAlignment="Center"/>
+                                    <Button x:Name="ConnectButton" Content="Connect to SITL" 
+                                            Style="{StaticResource ModernButton}"
+                                            HorizontalAlignment="Right" Width="100"/>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Angle Display -->
+                    <Border Background="#FF3D3D3D" CornerRadius="5" Margin="0,10" Padding="10">
+                        <StackPanel>
+                            <TextBlock Text="Angles" FontSize="16" Foreground="White"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Text="Scan H:" Foreground="White" Margin="0,5"/>
+                                <TextBlock x:Name="ScanHAngle" Grid.Column="1" Text="0°" 
+                                         Foreground="White" Margin="5,5"/>
+
+                                <TextBlock Text="Scan V:" Grid.Row="1" Foreground="White" 
+                                         Margin="0,5"/>
+                                <TextBlock x:Name="ScanVAngle" Grid.Row="1" Grid.Column="1" 
+                                         Text="0°" Foreground="White" Margin="5,5"/>
+
+                                <TextBlock Text="Dir H:" Grid.Row="2" Foreground="White" 
+                                         Margin="0,5"/>
+                                <TextBlock x:Name="DirHAngle" Grid.Row="2" Grid.Column="1" 
+                                         Text="0°" Foreground="White" Margin="5,5"/>
+
+                                <TextBlock Text="Dir V:" Grid.Row="3" Foreground="White" 
+                                         Margin="0,5"/>
+                                <TextBlock x:Name="DirVAngle" Grid.Row="3" Grid.Column="1" 
+                                         Text="0°" Foreground="White" Margin="5,5"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Signal Strength -->
+                    <Border Background="#FF3D3D3D" CornerRadius="5" Margin="0,10" Padding="10">
+                        <StackPanel>
+                            <TextBlock Text="Signal Strength" FontSize="16" Foreground="White"/>
+                            <Grid Height="100" Margin="0,10">
+                                <Rectangle x:Name="SignalBar" Fill="#FF00FF00" 
+                                         HorizontalAlignment="Left">
+                                    <Rectangle.RenderTransform>
+                                        <ScaleTransform x:Name="SignalScale"/>
+                                    </Rectangle.RenderTransform>
+                                </Rectangle>
+                            </Grid>
+                            <TextBlock x:Name="SignalStrength" Text="0%" 
+                                     FontSize="24" Foreground="White"
+                                     HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Status Message -->
+                    <Border Background="#FF3D3D3D" CornerRadius="5" Margin="0,10" Padding="10">
+                        <StackPanel>
+                            <TextBlock Text="Status" FontSize="16" Foreground="White"/>
+                            <TextBlock x:Name="StatusMessage" Text="Ready" 
+                                     Foreground="White" Margin="0,5"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Controls -->
+                    <Border Background="#FF3D3D3D" CornerRadius="5" Margin="0,10" Padding="10">
+                        <StackPanel>
+                            <Button x:Name="StartButton" Content="Start Scanning" 
+                                    Style="{StaticResource ModernButton}" Margin="0,5"/>
+                            <Button x:Name="ResetButton" Content="Reset" 
+                                    Style="{StaticResource ModernButton}" Margin="0,5"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
     </Grid>
 </Window>
