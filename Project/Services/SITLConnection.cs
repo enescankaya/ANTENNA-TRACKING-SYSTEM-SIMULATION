@@ -14,7 +14,7 @@ namespace Project.Services
         public event EventHandler<AirplaneState> OnPositionUpdate;
         public event EventHandler<string> OnConnectionStatusChanged;
 
-        public async Task Connect(string host = "127.0.0.1", int port = 5762)
+        public async Task Connect(string host = "127.0.0.1", int port = 5760)
         {
             try
             {
@@ -27,7 +27,7 @@ namespace Project.Services
             }
             catch (Exception ex)
             {
-                OnConnectionStatusChanged?.Invoke(this, $"No Connection");
+                OnConnectionStatusChanged?.Invoke(this, $"Connection failed: {ex.Message}");
                 throw;
             }
         }
@@ -57,12 +57,11 @@ namespace Project.Services
         {
             try
             {
-                // Simple parsing of position data (in real implementation, use proper MAVLink parsing)
+                // Test amaçlı olarak Keşan Havalimanı'nda uçuş simülasyonu
                 var state = new AirplaneState
                 {
-                    // Simulated values for testing
-                    Latitude = Math.Sin(DateTime.Now.Second * Math.PI / 30) * 0.001,
-                    Longitude = Math.Cos(DateTime.Now.Second * Math.PI / 30) * 0.001,
+                    Latitude = 40.737222 + (Math.Sin(DateTime.Now.Second * Math.PI / 30) * 0.001),
+                    Longitude = 26.571667 + (Math.Cos(DateTime.Now.Second * Math.PI / 30) * 0.001),
                     Altitude = 100 + Math.Sin(DateTime.Now.Second * Math.PI / 15) * 10,
                     Heading = (DateTime.Now.Second * 6) % 360
                 };

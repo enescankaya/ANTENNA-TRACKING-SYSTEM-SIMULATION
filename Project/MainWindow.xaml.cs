@@ -159,12 +159,14 @@ namespace Project
 
             try
             {
-                // Only center map every 5 seconds
-                bool shouldCenterMap = (DateTime.Now - lastMapCenterUpdate).TotalMilliseconds >= MAP_CENTER_INTERVAL;
+                // Only center map every 5 seconds and if scanning
+                bool shouldCenterMap = (DateTime.Now - lastMapCenterUpdate).TotalMilliseconds >= MAP_CENTER_INTERVAL
+                                      && isScanning;
 
                 if (shouldCenterMap)
                 {
-                    MapControl.Position = new PointLatLng(airplane.Latitude, airplane.Longitude);
+                    // Keşan Havalimanı merkezli görünüm
+                    MapControl.Position = baseStationPosition;
                     lastMapCenterUpdate = DateTime.Now;
                 }
 
@@ -229,9 +231,16 @@ namespace Project
             StartButton.Content = isScanning ? "Stop Scanning" : "Start Scanning";
 
             if (isScanning)
+            {
+                // Keşan Havalimanı'na odaklan
+                MapControl.Position = baseStationPosition;
+                MapControl.Zoom = 16;
                 updateTimer.Start();
+            }
             else
+            {
                 updateTimer.Stop();
+            }
         }
 
         private void ResetButton_Click(object sender, RoutedEventArgs e)
@@ -326,17 +335,18 @@ namespace Project
                 GMap.NET.MapProviders.GMapProvider.WebProxy = System.Net.WebRequest.GetSystemWebProxy();
                 GMap.NET.MapProviders.GMapProvider.WebProxy.Credentials = System.Net.CredentialCache.DefaultCredentials;
 
-                // OpenStreetMap provider'ı kullan
-                MapControl.MapProvider = GMap.NET.MapProviders.OpenStreetMapProvider.Instance;
+                // Google Satellite provider'ı kullan
+                MapControl.MapProvider = GMap.NET.MapProviders.GoogleSatelliteMapProvider.Instance;
+                GMaps.Instance.Mode = AccessMode.ServerAndCache;
 
                 // Keşan Havalimanı koordinatları
                 baseStationPosition = new PointLatLng(40.737222, 26.571667);
                 MapControl.Position = baseStationPosition;
 
-                // Temel ayarlar
+                // Uydu görüntüsü için daha yakın zoom
                 MapControl.MinZoom = 2;
-                MapControl.MaxZoom = 17;
-                MapControl.Zoom = 14; // Zoom seviyesini biraz artırdık
+                MapControl.MaxZoom = 20; // Satellite için max zoom artırıldı
+                MapControl.Zoom = 16;    // Başlangıç zoom seviyesi artırıldı
 
                 // Harita kontrolleri
                 MapControl.ShowCenter = false;
