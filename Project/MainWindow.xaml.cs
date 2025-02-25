@@ -9,6 +9,7 @@ using Project.Models;
 using Project.Services;
 using GMap.NET;
 using GMap.NET.MapProviders;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace Project
@@ -81,6 +82,7 @@ namespace Project
             MapControl.MouseLeftButtonUp += MapControl_MouseLeftButtonUp;
             MapControl.MouseMove += MapControl_MouseMove;
             MapControl.MouseWheel += MapControl_MouseWheel;
+            DisconnectButton.Click += DisconnectButton_Click;
         }
 
         private void InitializeTimer()
@@ -198,13 +200,26 @@ namespace Project
         {
             try
             {
-                await sitlConnection.Connect();
+                string ip = IpAddressTextBox.Text;
+                if (!int.TryParse(PortTextBox.Text, out int port))
+                {
+                    MessageBox.Show("Please enter a valid port number");
+                    return;
+                }
+
+                await sitlConnection.Connect(ip, port);
                 ConnectionStatus.Text = "Connected";
+                ConnectionIndicator.Fill = Brushes.Green;
                 ConnectButton.IsEnabled = false;
+                DisconnectButton.IsEnabled = true;
+                IpAddressTextBox.IsEnabled = false;
+                PortTextBox.IsEnabled = false;
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Connection failed: {ex.Message}");
+                ConnectionIndicator.Fill = Brushes.Red;
+                ConnectionStatus.Text = "Connection Failed";
             }
         }
 
@@ -503,6 +518,47 @@ namespace Project
                 // Sinyal gücüne göre renk ayarla
                 byte alpha = (byte)(scanningAntenna.SignalStrength * 2.55);
                 radarSweep.Fill = new SolidColorBrush(Color.FromArgb(alpha, 0, 255, 0));
+            }
+        }
+
+        private void NumberValidationTextBox(object sender, TextCompositionEventArgs e)
+        {
+            e.Handled = !IsTextAllowed(e.Text);
+        }
+
+        private static bool IsTextAllowed(string text)
+        {
+            return text.All(char.IsDigit) || text == ".";
+        }
+
+        public void DisconnectAndReset()
+        {
+            ConnectButton.IsEnabled = true;
+            DisconnectButton.IsEnabled = false;
+            IpAddressTextBox.IsEnabled = true;
+            PortTextBox.IsEnabled = true;
+            ConnectionIndicator.Fill = Brushes.Red;
+            ConnectionStatus.Text = "Disconnected";
+
+            // Stop scanning if active
+            if (isScanning)
+            {
+                isScanning = false;
+                updateTimer.Stop();
+                StartButton.Content = "Start Scanning";
+            }
+        }
+
+        private void DisconnectButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                sitlConnection.Disconnect();
+                DisconnectAndReset();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Disconnect error: {ex.Message}");
             }
         }
     }

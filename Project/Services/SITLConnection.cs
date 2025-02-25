@@ -27,7 +27,7 @@ namespace Project.Services
             }
             catch (Exception ex)
             {
-                OnConnectionStatusChanged?.Invoke(this, $"Connection failed: {ex.Message}");
+                OnConnectionStatusChanged?.Invoke(this, $"No Connection");
                 throw;
             }
         }
@@ -47,7 +47,7 @@ namespace Project.Services
                 }
                 catch (Exception ex)
                 {
-                    OnConnectionStatusChanged?.Invoke(this, $"Connection error: {ex.Message}");
+                    OnConnectionStatusChanged?.Invoke(this, $"No Connection");
                     break;
                 }
             }
