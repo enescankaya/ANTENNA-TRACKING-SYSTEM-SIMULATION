@@ -96,39 +96,38 @@ namespace Project
 
         private void InitializeVisuals()
         {
-            // Radar sweep oluştur
-            radarSweep = new Path
-            {
-                Fill = new SolidColorBrush(Color.FromArgb(64, 0, 255, 0)),
-                Stroke = new SolidColorBrush(Color.FromArgb(128, 0, 255, 0)),
-                StrokeThickness = 2
-            };
-
             // Radar sweep geometrisi
             var geometry = new PathGeometry();
             var figure = new PathFigure();
             figure.StartPoint = new Point(0, 0);
-            figure.Segments.Add(new LineSegment(new Point(150, 0), true));
-            figure.Segments.Add(new ArcSegment(
-                new Point(0, 0),
+
+            // Sweep için yay segmenti
+            var arcSegment = new ArcSegment(
+                new Point(150, 0),
                 new Size(150, 150),
                 45, // Sweep angle
                 false, // IsLargeArc
                 SweepDirection.Clockwise,
-                true)); // IsStroked
+                true); // IsStroked
+
+            figure.Segments.Add(new LineSegment(new Point(150, 0), true));
+            figure.Segments.Add(arcSegment);
             geometry.Figures.Add(figure);
-            radarSweep.Data = geometry;
 
-            // Transform'ları oluştur
-            sweepRotation = new RotateTransform();
-            sweepPosition = new TranslateTransform();
+            if (RadarSweep != null)
+            {
+                RadarSweep.Data = geometry;
 
-            var transformGroup = new TransformGroup();
-            transformGroup.Children.Add(sweepRotation);
-            transformGroup.Children.Add(sweepPosition);
-            radarSweep.RenderTransform = transformGroup;
+                // Transform group oluştur
+                var transformGroup = new TransformGroup();
+                sweepRotation = new RotateTransform();
+                sweepPosition = new TranslateTransform();
 
-            MapCanvas.Children.Add(radarSweep);
+                transformGroup.Children.Add(sweepRotation);
+                transformGroup.Children.Add(sweepPosition);
+
+                RadarSweep.RenderTransform = transformGroup;
+            }
 
             // Uçak marker'ı
             planeMarker = new Ellipse
@@ -146,10 +145,6 @@ namespace Project
                 StrokeThickness = 2
             };
             MapCanvas.Children.Add(directionLine);
-
-            // Başlangıç pozisyonları
-            Canvas.SetLeft(planeMarker, MapCanvas.ActualWidth / 2);
-            Canvas.SetTop(planeMarker, MapCanvas.ActualHeight / 2);
         }
 
         private void UpdateMap()
@@ -255,12 +250,28 @@ namespace Project
 
         private void SitlConnection_OnPositionUpdate(object sender, AirplaneState e)
         {
-            airplane = e;
-            if (isScanning)
+            try
             {
-                UpdateAntennaPositions();
+                airplane = e;
+
+                if (isScanning)
+                {
+                    // Update antenna states
+                    antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
+                    antennaController.UpdateDirectionalAntenna(directionalAntenna, airplane);
+
+                    // Update UI
+                    Dispatcher.Invoke(() =>
+                    {
+                        UpdateAntennaDisplay();
+                        UpdateMap();
+                    });
+                }
             }
-            UpdateAntennaDisplay();
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Position update error: {ex.Message}");
+            }
         }
 
         private void SitlConnection_OnConnectionStatusChanged(object sender, string status)
@@ -305,25 +316,40 @@ namespace Project
 
         private void UpdateAntennaDisplay()
         {
-            // Update angles
-            ScanHAngle.Text = $"{scanningAntenna.HorizontalAngle:F1}°";
-            ScanVAngle.Text = $"{scanningAntenna.VerticalAngle:F1}°";
-            DirHAngle.Text = $"{directionalAntenna.HorizontalAngle:F1}°";
-            DirVAngle.Text = $"{directionalAntenna.VerticalAngle:F1}°";
-
-            // Update signal strength
-            double normalizedStrength = scanningAntenna.SignalStrength / 100.0;
-            SignalScale.ScaleX = normalizedStrength;
-            SignalStrength.Text = $"{scanningAntenna.SignalStrength:F1}%";
-
-            // Update radar sweep
-            if (radarRotation != null)
+            Dispatcher.Invoke(() =>
             {
-                radarRotation.Angle = scanningAntenna.HorizontalAngle;
-            }
+                try
+                {
+                    // Antenna angles
+                    if (scanningAntenna != null)
+                    {
+                        ScanHAngle.Text = $"{scanningAntenna.HorizontalAngle:F1}°";
+                        ScanVAngle.Text = $"{scanningAntenna.VerticalAngle:F1}°";
+                        SignalStrength.Text = $"{scanningAntenna.SignalStrength:F1}%";
+                        ScanSignalBar.Value = scanningAntenna.SignalStrength;
+                    }
 
-            // Update map
-            UpdateMap();
+                    if (directionalAntenna != null)
+                    {
+                        DirHAngle.Text = $"{directionalAntenna.HorizontalAngle:F1}°";
+                        DirVAngle.Text = $"{directionalAntenna.VerticalAngle:F1}°";
+                        DirSignalBar.Value = directionalAntenna.SignalStrength;
+                        DirSignalText.Text = $"{directionalAntenna.SignalStrength:F1}%";
+                    }
+
+                    // Update radar visualization
+                    UpdateRadarDisplay();
+
+                    // Update status message
+                    StatusMessage.Text = isScanning ?
+                        $"Scanning: {scanningAntenna?.SignalStrength:F1}% Signal" :
+                        "Ready";
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"UpdateAntennaDisplay error: {ex.Message}");
+                }
+            });
         }
 
         private void InitializeMap()
@@ -511,23 +537,26 @@ namespace Project
 
         private void UpdateRadarDisplay()
         {
-            if (radarSweep != null && scanningAntenna != null)
+            if (RadarSweep != null && scanningAntenna != null)
             {
+                // Radar sweep rotation güncelleme
                 if (sweepRotation != null)
                 {
                     sweepRotation.Angle = scanningAntenna.HorizontalAngle;
-                }
 
-                if (MapControl != null && baseStationPosition != null && sweepPosition != null)
-                {
-                    var point = MapControl.FromLatLngToLocal(baseStationPosition);
-                    sweepPosition.X = point.X;
-                    sweepPosition.Y = point.Y;
+                    // Sinyal gücüne göre radar renk ve opaklık ayarı
+                    byte alpha = (byte)(scanningAntenna.SignalStrength * 1.5);
+                    var gradientBrush = new RadialGradientBrush();
+                    gradientBrush.GradientStops.Add(new GradientStop(Color.FromArgb(alpha, 0, 255, 0), 0));
+                    gradientBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 255, 0), 1));
+                    RadarSweep.Fill = gradientBrush;
                 }
+            }
 
-                // Sinyal gücüne göre renk ayarla
-                byte alpha = (byte)(scanningAntenna.SignalStrength * 2.55);
-                radarSweep.Fill = new SolidColorBrush(Color.FromArgb(alpha, 0, 255, 0));
+            // Signal bar güncelleme
+            if (ScanSignalBar != null)
+            {
+                ScanSignalBar.Value = scanningAntenna?.SignalStrength ?? 0;
             }
         }
 

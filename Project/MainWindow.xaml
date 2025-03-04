@@ -4,65 +4,153 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:WindowsPresentation="clr-namespace:GMap.NET.WindowsPresentation;assembly=GMap.NET.WindowsPresentation"
-        Title="RSSI Antenna Tracker" Height="800" Width="1200" Background="#FF1E1E1E" Loaded="MainWindow_Loaded">
+        Title="RSSI Antenna Tracker" Height="800" Width="1200" 
+        Background="#FF1A1A1A" 
+        Loaded="MainWindow_Loaded">
+
     <Window.Resources>
-        <!-- Modern Button Style -->
+        <!-- Improved Modern Button Style -->
         <Style x:Key="ModernButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#FF444444"/>
+            <Setter Property="Background" Value="#FF2D2D2D"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#FF3D3D3D"/>
             <Setter Property="Padding" Value="15,8"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="4">
-                            <ContentPresenter HorizontalAlignment="Center" 
-                                            VerticalAlignment="Center"/>
+                            <Grid>
+                                <ContentPresenter HorizontalAlignment="Center" 
+                                                VerticalAlignment="Center"/>
+                                <Border x:Name="Overlay" 
+                                        Background="White" 
+                                        Opacity="0"
+                                        CornerRadius="4"/>
+                            </Grid>
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Overlay" Property="Opacity" Value="0.1"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Overlay" Property="Opacity" Value="0.2"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#FF666666"/>
-                </Trigger>
-                <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="#FF333333"/>
-                </Trigger>
-                <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Opacity" Value="0.5"/>
-                </Trigger>
-            </Style.Triggers>
         </Style>
 
-        <!-- Modern TextBox Style -->
+        <!-- Improved TextBox Style -->
         <Style x:Key="ModernTextBoxStyle" TargetType="TextBox">
-            <Setter Property="Background" Value="#FF333333"/>
+            <Setter Property="Background" Value="#FF2D2D2D"/>
             <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#FF3D3D3D"/>
             <Setter Property="Padding" Value="8,5"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
                         <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="4">
-                            <ScrollViewer x:Name="PART_ContentHost"/>
+                            <Grid>
+                                <ScrollViewer x:Name="PART_ContentHost" Margin="2"/>
+                                <TextBlock Text="{TemplateBinding Tag}" 
+                                         Margin="8,0,0,0"
+                                         VerticalAlignment="Center"
+                                         Foreground="#FF808080">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text.Length, RelativeSource={RelativeSource Mode=TemplatedParent}}" Value="0">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Text.Length, RelativeSource={RelativeSource Mode=TemplatedParent}}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Text.Length, RelativeSource={RelativeSource Mode=TemplatedParent}}" Value="0">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding Text.Length, RelativeSource={RelativeSource Mode=TemplatedParent}}" Value="0" />
+                                                        <Condition Binding="{Binding IsFocused, RelativeSource={RelativeSource Mode=TemplatedParent}}" Value="True" />
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
                         </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Signal Strength Bar Style -->
+        <Style x:Key="SignalStrengthBarStyle" TargetType="ProgressBar">
+            <Setter Property="Height" Value="4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid>
+                            <Border Background="#FF2D2D2D" 
+                                    CornerRadius="2"/>
+                            <Border x:Name="PART_Indicator" 
+                                    Background="{TemplateBinding Foreground}"
+                                    CornerRadius="2"
+                                    HorizontalAlignment="Left">
+                                <Border.Effect>
+                                    <DropShadowEffect ShadowDepth="0" 
+                                                    BlurRadius="10" 
+                                                    Color="{Binding Background.Color, ElementName=PART_Indicator}"/>
+                                </Border.Effect>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern Panel Style -->
+        <Style x:Key="ModernPanelStyle" TargetType="Border">
+            <Setter Property="Background" Value="#FF2D2D2D"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#FF3D3D3D"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect ShadowDepth="0" 
+                                    BlurRadius="10" 
+                                    Color="#40000000"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
-    <Grid>
+
+    <Grid Margin="10">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="3*"/>
-            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*" MinWidth="300"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Map Section -->
-        <Border Grid.Column="0" Background="#FF2D2D2D" Margin="10" CornerRadius="5">
+        <!-- Map and Radar Section -->
+        <Border Grid.Column="0" 
+                Style="{StaticResource ModernPanelStyle}">
             <Grid>
+                <!-- Map Control -->
                 <WindowsPresentation:GMapControl x:Name="MapControl" 
                                                Margin="5"
                                                MinZoom="2" 
@@ -70,195 +158,328 @@
                                                Zoom="13"
                                                CanDragMap="True"
                                                MouseWheelZoomType="MousePositionAndCenter"
-                                               MouseWheelZoomEnabled="True"
-                                               MouseDoubleClick="MapControl_MouseDoubleClick"
-                                               MouseLeftButtonDown="MapControl_MouseLeftButtonDown"
-                                               MouseLeftButtonUp="MapControl_MouseLeftButtonUp"
-                                               MouseMove="MapControl_MouseMove"
-                                               MouseWheel="MapControl_MouseWheel"
-                                               ClipToBounds="True"
-                                               Panel.ZIndex="0"/>
+                                               MouseWheelZoomEnabled="True"/>
+
+                <!-- Radar Overlay -->
                 <Canvas x:Name="MapCanvas" 
                         Background="Transparent" 
-                        Panel.ZIndex="1"
                         IsHitTestVisible="False">
-                    <!-- Radar Sweep -->
-                    <Path x:Name="RadarSweep" Fill="#4000FF00" Stroke="#8000FF00" StrokeThickness="2">
-                        <Path.RenderTransform>
-                            <TransformGroup>
-                                <RotateTransform x:Name="radarRotation" Angle="0" CenterX="0" CenterY="0"/>
-                                <TranslateTransform x:Name="radarPosition" X="0" Y="0"/>
-                            </TransformGroup>
-                        </Path.RenderTransform>
+                    <!-- Radar Background -->
+                    <Ellipse x:Name="RadarBackground"
+                            Width="400" Height="400"
+                            Fill="#20FFFFFF"
+                            Stroke="#40FFFFFF"
+                            StrokeThickness="1">
+                        <Ellipse.Effect>
+                            <BlurEffect Radius="2"/>
+                        </Ellipse.Effect>
+                    </Ellipse>
+
+                    <!-- Radar Grid Lines -->
+                    <Path x:Name="RadarGrid" 
+                          Stroke="#30FFFFFF" 
+                          StrokeThickness="1">
+                        <Path.Data>
+                            <GeometryGroup>
+                                <!-- Circular grid lines -->
+                                <EllipseGeometry Center="200,200" RadiusX="100" RadiusY="100"/>
+                                <EllipseGeometry Center="200,200" RadiusX="150" RadiusY="150"/>
+                                <!-- Cross lines -->
+                                <LineGeometry StartPoint="0,200" EndPoint="400,200"/>
+                                <LineGeometry StartPoint="200,0" EndPoint="200,400"/>
+                            </GeometryGroup>
+                        </Path.Data>
                     </Path>
+
+                    <!-- Radar Sweep -->
+                    <Path x:Name="RadarSweep" 
+                          Fill="#4000FF00">
+                        <Path.Effect>
+                            <BlurEffect Radius="10"/>
+                        </Path.Effect>
+                    </Path>
+
+                    <!-- Signal Indicators -->
+                    <ItemsControl x:Name="SignalIndicators">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
                 </Canvas>
             </Grid>
         </Border>
 
         <!-- Control Panel -->
-        <Border Grid.Column="1" Background="#FF2D2D2D" Margin="0,10,10,10" CornerRadius="10">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
+        <Border Grid.Column="1" 
+                Style="{StaticResource ModernPanelStyle}"
+                Margin="10,0,0,0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="15">
                     <!-- Connection Panel -->
-                    <RowDefinition Height="*"/>
-                    <!-- Main Controls -->
-                </Grid.RowDefinitions>
-
-                <!-- Connection Panel - Always Visible -->
-                <Border Background="#FF3D3D3D" CornerRadius="5" Margin="15,15,15,5" Padding="15">
-                    <StackPanel>
-                        <TextBlock Text="Connection Settings" 
-                                  FontSize="16" 
-                                  Foreground="White" 
-                                  Margin="0,0,0,10"/>
-
-                        <!-- Connection Form -->
-                        <Grid Margin="0,5">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-
-                            <!-- IP Address -->
-                            <TextBlock Text="IP Address:" 
-                                      Foreground="White" 
-                                      VerticalAlignment="Center"
-                                      Margin="0,0,10,0"/>
-                            <TextBox x:Name="IpAddressTextBox" 
-                                     Grid.Column="1"
-                                     Text="127.0.0.1"
-                                     Style="{StaticResource ModernTextBoxStyle}"
-                                     PreviewTextInput="NumberValidationTextBox"/>
-
-                            <!-- Port -->
-                            <TextBlock Text="Port:" 
-                                      Grid.Row="1"
-                                      Foreground="White" 
-                                      VerticalAlignment="Center"
-                                      Margin="0,10,10,0"/>
-                            <TextBox x:Name="PortTextBox" 
-                                     Grid.Row="1"
-                                     Grid.Column="1"
-                                     Text="5762"
-                                     Margin="0,10,0,0"
-                                     Style="{StaticResource ModernTextBoxStyle}"
-                                     PreviewTextInput="NumberValidationTextBox"/>
-
-                            <!-- Connection Status -->
-                            <StackPanel Grid.Row="2" 
-                                        Grid.ColumnSpan="2"
-                                        Orientation="Horizontal"
-                                        Margin="0,15,0,0">
-                                <Ellipse x:Name="ConnectionIndicator" 
-                                        Width="12" Height="12" 
-                                        Fill="Red" 
-                                        Margin="0,0,10,0"/>
-                                <TextBlock x:Name="ConnectionStatus" 
-                                          Text="Disconnected" 
-                                          Foreground="White"/>
-                            </StackPanel>
-                        </Grid>
-
-                        <!-- Connection Buttons -->
-                        <StackPanel Orientation="Horizontal" Margin="0,15,0,0">
-                            <Button x:Name="ConnectButton" 
-                                    Content="Connect" 
-                                    Style="{StaticResource ModernButtonStyle}"
-                                    Width="100"
-                                    Margin="0,0,10,0"/>
-                            <Button x:Name="DisconnectButton" 
-                                    Content="Disconnect" 
-                                    Style="{StaticResource ModernButtonStyle}"
-                                    Width="100"
-                                    IsEnabled="False"/>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Main Controls Panel - Fixed Height -->
-                <StackPanel Grid.Row="1" Margin="15,5,15,15">
-                    <!-- Angle Display -->
-                    <Border Background="#FF3D3D3D" CornerRadius="5" Margin="0,5" Padding="10">
+                    <Border Style="{StaticResource ModernPanelStyle}" 
+                            Margin="0,0,0,10" 
+                            Padding="15">
                         <StackPanel>
-                            <TextBlock Text="Angles" FontSize="16" Foreground="White"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
+                            <TextBlock Text="CONNECTION" 
+                                     FontSize="12" 
+                                     FontWeight="SemiBold"
+                                     Foreground="#FF00FF00"/>
+
+                            <!-- Connection Form -->
+                            <Grid Margin="0,10">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="10"/>
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
-                                <TextBlock Text="Scan H:" Foreground="White" Margin="0,5"/>
-                                <TextBlock x:Name="ScanHAngle" Grid.Column="1" Text="0°" 
-                                         Foreground="White" Margin="5,5"/>
+                                <TextBox x:Name="IpAddressTextBox" 
+                                         Style="{StaticResource ModernTextBoxStyle}"
+                                         Tag="IP Address"/>
 
-                                <TextBlock Text="Scan V:" Grid.Row="1" Foreground="White" 
-                                         Margin="0,5"/>
-                                <TextBlock x:Name="ScanVAngle" Grid.Row="1" Grid.Column="1" 
-                                         Text="0°" Foreground="White" Margin="5,5"/>
-
-                                <TextBlock Text="Dir H:" Grid.Row="2" Foreground="White" 
-                                         Margin="0,5"/>
-                                <TextBlock x:Name="DirHAngle" Grid.Row="2" Grid.Column="1" 
-                                         Text="0°" Foreground="White" Margin="5,5"/>
-
-                                <TextBlock Text="Dir V:" Grid.Row="3" Foreground="White" 
-                                         Margin="0,5"/>
-                                <TextBlock x:Name="DirVAngle" Grid.Row="3" Grid.Column="1" 
-                                         Text="0°" Foreground="White" Margin="5,5"/>
+                                <TextBox x:Name="PortTextBox" 
+                                         Grid.Row="2"
+                                         Style="{StaticResource ModernTextBoxStyle}"
+                                         Tag="Port"/>
                             </Grid>
-                        </StackPanel>
-                    </Border>
 
-                    <!-- Signal Strength -->
-                    <Border Background="#FF3D3D3D" CornerRadius="5" Margin="0,5" Padding="10">
-                        <StackPanel>
-                            <TextBlock Text="Signal Strength" FontSize="16" Foreground="White"/>
-                            <Grid Height="100" Margin="0,10">
-                                <Rectangle x:Name="SignalBar" Fill="#FF00FF00" 
-                                         HorizontalAlignment="Left">
-                                    <Rectangle.RenderTransform>
-                                        <ScaleTransform x:Name="SignalScale"/>
-                                    </Rectangle.RenderTransform>
-                                </Rectangle>
+                            <!-- Status Indicator -->
+                            <Grid Margin="0,10">
+                                <Border Background="#FF2D2D2D" 
+                                        CornerRadius="4" 
+                                        Padding="10,5">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse x:Name="ConnectionIndicator" 
+                                                Width="8" Height="8" 
+                                                Fill="Red" 
+                                                Margin="0,0,8,0"/>
+                                        <TextBlock x:Name="ConnectionStatus" 
+                                                  Text="Disconnected"
+                                                  VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
                             </Grid>
-                            <TextBlock x:Name="SignalStrength" Text="0%" 
-                                     FontSize="24" Foreground="White"
-                                     HorizontalAlignment="Center"/>
+
+                            <!-- Connection Buttons -->
+                            <UniformGrid Columns="2" Margin="0,10,0,0">
+                                <Button x:Name="ConnectButton" 
+                                        Content="CONNECT" 
+                                        Style="{StaticResource ModernButtonStyle}"
+                                        Margin="0,0,5,0"/>
+                                <Button x:Name="DisconnectButton" 
+                                        Content="DISCONNECT" 
+                                        Style="{StaticResource ModernButtonStyle}"
+                                        Margin="5,0,0,0"
+                                        IsEnabled="False"/>
+                            </UniformGrid>
                         </StackPanel>
                     </Border>
 
-                    <!-- Status Message -->
-                    <Border Background="#FF3D3D3D" CornerRadius="5" Margin="0,5" Padding="10">
+                    <!-- Scanning Antenna Panel -->
+                    <Border Style="{StaticResource ModernPanelStyle}" 
+                            Margin="0,0,0,10" 
+                            Padding="15">
                         <StackPanel>
-                            <TextBlock Text="Status" FontSize="16" Foreground="White"/>
-                            <TextBlock x:Name="StatusMessage" Text="Ready" 
-                                     Foreground="White" Margin="0,5"/>
+                            <TextBlock Text="SCANNING ANTENNA" 
+                                     FontSize="12" 
+                                     FontWeight="SemiBold"
+                                     Foreground="#FF00FF00"/>
+
+                            <!-- Signal Strength Display -->
+                            <Grid Margin="0,10">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="5"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Text="Signal Strength" 
+                                         Foreground="#FF808080"
+                                         FontSize="11"/>
+
+                                <ProgressBar x:Name="ScanSignalBar"
+                                           Grid.Row="1"
+                                           Style="{StaticResource SignalStrengthBarStyle}"
+                                           Foreground="#FF00FF00"
+                                           Maximum="100"/>
+
+                                <TextBlock x:Name="SignalStrength" 
+                                         Grid.Row="2"
+                                         Text="0%"
+                                         FontSize="20"
+                                         FontWeight="SemiBold"
+                                         Foreground="#FF00FF00"/>
+                            </Grid>
+
+                            <!-- Angles Display -->
+                            <UniformGrid Columns="2" Margin="0,15,0,0">
+                                <!-- Horizontal Angle -->
+                                <Border Background="#FF262626" 
+                                        CornerRadius="4" 
+                                        Margin="0,0,5,0" 
+                                        Padding="10">
+                                    <StackPanel>
+                                        <TextBlock Text="Horizontal" 
+                                                 Foreground="#FF808080"
+                                                 FontSize="11"/>
+                                        <TextBlock x:Name="ScanHAngle" 
+                                                 Text="0°" 
+                                                 FontSize="20"
+                                                 FontWeight="SemiBold"
+                                                 Foreground="#FF00FF00"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Vertical Angle -->
+                                <Border Background="#FF262626" 
+                                        CornerRadius="4" 
+                                        Margin="5,0,0,0" 
+                                        Padding="10">
+                                    <StackPanel>
+                                        <TextBlock Text="Vertical" 
+                                                 Foreground="#FF808080"
+                                                 FontSize="11"/>
+                                        <TextBlock x:Name="ScanVAngle" 
+                                                 Text="0°" 
+                                                 FontSize="20"
+                                                 FontWeight="SemiBold"
+                                                 Foreground="#FF00FF00"/>
+                                    </StackPanel>
+                                </Border>
+                            </UniformGrid>
                         </StackPanel>
                     </Border>
 
-                    <!-- Controls -->
-                    <Border Background="#FF3D3D3D" CornerRadius="5" Margin="0,5" Padding="10">
+                    <!-- Directional Antenna Panel -->
+                    <Border Style="{StaticResource ModernPanelStyle}" 
+                            Margin="0,0,0,10" 
+                            Padding="15">
                         <StackPanel>
-                            <Button x:Name="StartButton" Content="Start Scanning" 
-                                    Style="{StaticResource ModernButton}" Margin="0,5"/>
-                            <Button x:Name="ResetButton" Content="Reset" 
-                                    Style="{StaticResource ModernButton}" Margin="0,5"/>
+                            <TextBlock Text="DIRECTIONAL ANTENNA" 
+                                     FontSize="12" 
+                                     FontWeight="SemiBold"
+                                     Foreground="#FF00A0FF"/>
+
+                            <!-- Signal Strength Display -->
+                            <Grid Margin="0,10">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="5"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Text="Signal Strength" 
+                                         Foreground="#FF808080"
+                                         FontSize="11"/>
+
+                                <ProgressBar x:Name="DirSignalBar"
+                                           Grid.Row="1"
+                                           Style="{StaticResource SignalStrengthBarStyle}"
+                                           Foreground="#FF00A0FF"
+                                           Maximum="100"/>
+
+                                <TextBlock x:Name="DirSignalText" 
+                                         Grid.Row="2"
+                                         Text="0%"
+                                         FontSize="20"
+                                         FontWeight="SemiBold"
+                                         Foreground="#FF00A0FF"/>
+                            </Grid>
+
+                            <!-- Angles Display -->
+                            <UniformGrid Columns="2" Margin="0,15,0,0">
+                                <!-- Horizontal Angle -->
+                                <Border Background="#FF262626" 
+                                        CornerRadius="4" 
+                                        Margin="0,0,5,0" 
+                                        Padding="10">
+                                    <StackPanel>
+                                        <TextBlock Text="Horizontal" 
+                                                 Foreground="#FF808080"
+                                                 FontSize="11"/>
+                                        <TextBlock x:Name="DirHAngle" 
+                                                 Text="0°" 
+                                                 FontSize="20"
+                                                 FontWeight="SemiBold"
+                                                 Foreground="#FF00A0FF"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Vertical Angle -->
+                                <Border Background="#FF262626" 
+                                        CornerRadius="4" 
+                                        Margin="5,0,0,0" 
+                                        Padding="10">
+                                    <StackPanel>
+                                        <TextBlock Text="Vertical" 
+                                                 Foreground="#FF808080"
+                                                 FontSize="11"/>
+                                        <TextBlock x:Name="DirVAngle" 
+                                                 Text="0°" 
+                                                 FontSize="20"
+                                                 FontWeight="SemiBold"
+                                                 Foreground="#FF00A0FF"/>
+                                    </StackPanel>
+                                </Border>
+                            </UniformGrid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Control Buttons -->
+                    <Border Style="{StaticResource ModernPanelStyle}" 
+                            Margin="0,0,0,10" 
+                            Padding="15">
+                        <StackPanel>
+                            <TextBlock Text="CONTROLS" 
+                                     FontSize="12" 
+                                     FontWeight="SemiBold"
+                                     Foreground="White"/>
+
+                            <Button x:Name="StartButton" 
+                                   Content="START SCANNING" 
+                                   Style="{StaticResource ModernButtonStyle}"
+                                   Background="#FF1A4D1A"
+                                   Height="40"
+                                   Margin="0,10"/>
+
+                            <Button x:Name="ResetButton" 
+                                   Content="RESET" 
+                                   Style="{StaticResource ModernButtonStyle}"
+                                   Background="#FF4D1A1A"
+                                   Height="40"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- System Status -->
+                    <Border Style="{StaticResource ModernPanelStyle}" 
+                            Padding="15">
+                        <StackPanel>
+                            <TextBlock Text="SYSTEM STATUS" 
+                                     FontSize="12" 
+                                     FontWeight="SemiBold"
+                                     Foreground="White"/>
+
+                            <Border Background="#FF262626" 
+                                    CornerRadius="4" 
+                                    Padding="10" 
+                                    Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock x:Name="SystemStatus" 
+                                             Text="System Initialized"
+                                             Foreground="#FFFFA500"/>
+
+                                    <TextBlock x:Name="StatusMessage" 
+                                             Text="Ready"
+                                             Foreground="#FF808080"
+                                             Margin="0,5,0,0"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Border>
                 </StackPanel>
-            </Grid>
+            </ScrollViewer>
         </Border>
     </Grid>
 </Window>
