@@ -5,96 +5,128 @@ namespace Project.Services
 {
     public class AntennaController
     {
+        private readonly KalmanFilter horizontalFilter;
+        private readonly KalmanFilter verticalFilter;
         private readonly KalmanFilter signalFilter;
-        private readonly KalmanFilter angleFilter;
         private readonly ParticleSwarmOptimizer pso;
         private const double SIGNAL_THRESHOLD = 20.0;
         private const double MAX_VERTICAL_ANGLE = 90.0;
-        private const double SCAN_STEP = 5.0;
 
         public AntennaController()
         {
-            signalFilter = new KalmanFilter();
-            angleFilter = new KalmanFilter();
+            // Yatay açı için Kalman filtresi (daha hızlı tepki)
+            horizontalFilter = new KalmanFilter(
+                processNoise: 0.01,    // Daha yüksek process noise
+                measurementNoise: 0.1,  // Normal measurement noise
+                dt: 0.05               // Daha hızlı güncelleme
+            );
+
+            // Dikey açı için Kalman filtresi (daha stabil)
+            verticalFilter = new KalmanFilter(
+                processNoise: 0.005,    // Daha düşük process noise
+                measurementNoise: 0.1,   // Normal measurement noise
+                dt: 0.1                 // Normal güncelleme
+            );
+
+            // Sinyal için Kalman filtresi (daha fazla filtreleme)
+            signalFilter = new KalmanFilter(
+                processNoise: 0.001,    // Düşük process noise
+                measurementNoise: 0.5,   // Yüksek measurement noise
+                dt: 0.1                 // Normal güncelleme
+            );
+
             pso = new ParticleSwarmOptimizer();
         }
 
         public void UpdateScanningAntenna(AntennaState antenna, AirplaneState airplane)
         {
-            if (antenna.SignalStrength < SIGNAL_THRESHOLD)
+            // Signal strength filtrelemesi
+            double filteredSignal = signalFilter.Update(antenna.SignalStrength);
+            antenna.SignalStrength = filteredSignal;
+
+            if (filteredSignal < SIGNAL_THRESHOLD)
             {
-                // Perform full scan when signal is weak
-                antenna.HorizontalAngle = (antenna.HorizontalAngle + SCAN_STEP) % 360;
-                antenna.VerticalAngle = Math.Min(MAX_VERTICAL_ANGLE,
-                    Math.Max(0, antenna.VerticalAngle + (antenna.HorizontalAngle >= 350 ? SCAN_STEP : 0)));
+                // Geniş tarama modu
+                PerformWideScan(antenna);
             }
             else
             {
-                // Use PSO for optimization when signal is strong
-                double nextAngle = pso.GetNextAngle(antenna.SignalStrength);
-                antenna.HorizontalAngle = angleFilter.Update(nextAngle);
+                // PSO optimizasyonu ve Kalman filtresi ile hassas takip
+                double optimizedAngle = pso.GetNextAngle(filteredSignal);
+                antenna.HorizontalAngle = horizontalFilter.Update(optimizedAngle);
+                antenna.VerticalAngle = verticalFilter.Update(CalculateVerticalAngle(airplane));
             }
-
-            // Update signal metrics
-            UpdateSignalMetrics(antenna, airplane);
         }
 
         public void UpdateDirectionalAntenna(AntennaState antenna, AirplaneState airplane)
         {
-            // Calculate ideal angles based on airplane position
-            double horizontalAngle = Math.Atan2(airplane.Longitude, airplane.Latitude) * 180 / Math.PI;
-            double verticalAngle = Math.Atan2(airplane.Altitude,
-                Math.Sqrt(airplane.Latitude * airplane.Latitude + airplane.Longitude * airplane.Longitude)) * 180 / Math.PI;
+            // Hedef açıları hesapla
+            double targetHAngle = CalculateHorizontalAngle(airplane);
+            double targetVAngle = CalculateVerticalAngle(airplane);
 
-            // Apply Kalman filtering to smooth movement
-            antenna.HorizontalAngle = angleFilter.Update(horizontalAngle);
-            antenna.VerticalAngle = angleFilter.Update(verticalAngle);
+            // Kalman filtresi ile yumuşatılmış açılar
+            antenna.HorizontalAngle = horizontalFilter.Update(targetHAngle);
+            antenna.VerticalAngle = verticalFilter.Update(targetVAngle);
 
-            // Update signal metrics
-            UpdateSignalMetrics(antenna, airplane);
+            // Sinyal gücü filtrelemesi
+            antenna.SignalStrength = signalFilter.Update(CalculateSignalStrength(antenna, airplane));
         }
 
-        private void UpdateSignalMetrics(AntennaState antenna, AirplaneState airplane)
+        private void PerformWideScan(AntennaState antenna)
         {
-            // Calculate base RSSI based on distance and angle
-            double distance = CalculateDistance(airplane);
-            double angleDifference = CalculateAngleDifference(antenna, airplane);
+            const double SCAN_STEP = 5.0;
 
-            // Simulate RSSI (inversely proportional to distance and angle difference)
-            antenna.RSSI = Math.Max(-100, -20 * Math.Log10(distance) - 0.5 * angleDifference);
+            // Yatay tarama
+            double nextHAngle = (antenna.HorizontalAngle + SCAN_STEP) % 360;
+            antenna.HorizontalAngle = horizontalFilter.Update(nextHAngle);
 
-            // Simulate SNR (better when more directly aligned)
-            antenna.SNR = Math.Max(0, 30 - (angleDifference / 2));
-
-            // Combined signal strength (normalized to 0-100 range)
-            double rawSignalStrength = ((antenna.RSSI + 100) / 100.0 * 0.7 + antenna.SNR / 30.0 * 0.3) * 100;
-            antenna.SignalStrength = signalFilter.Update(rawSignalStrength);
+            // Dikey tarama (yatay tarama tamamlandığında)
+            if (nextHAngle < SCAN_STEP)
+            {
+                double nextVAngle = antenna.VerticalAngle + SCAN_STEP;
+                if (nextVAngle > MAX_VERTICAL_ANGLE)
+                {
+                    nextVAngle = 0; // Dikey taramayı sıfırla
+                }
+                antenna.VerticalAngle = verticalFilter.Update(nextVAngle);
+            }
         }
 
-        private double CalculateDistance(AirplaneState airplane)
+        private double CalculateHorizontalAngle(AirplaneState airplane)
         {
-            return Math.Sqrt(
+            return (Math.Atan2(airplane.Longitude, airplane.Latitude) * 180 / Math.PI + 360) % 360;
+        }
+
+        private double CalculateVerticalAngle(AirplaneState airplane)
+        {
+            double distance = Math.Sqrt(
+                airplane.Latitude * airplane.Latitude +
+                airplane.Longitude * airplane.Longitude
+            );
+            return Math.Atan2(airplane.Altitude, distance) * 180 / Math.PI;
+        }
+
+        private double CalculateSignalStrength(AntennaState antenna, AirplaneState airplane)
+        {
+            // Mesafe ve açı farkına göre sinyal gücü hesaplama
+            double distance = Math.Sqrt(
                 airplane.Latitude * airplane.Latitude +
                 airplane.Longitude * airplane.Longitude +
-                airplane.Altitude * airplane.Altitude);
-        }
+                airplane.Altitude * airplane.Altitude
+            );
 
-        private double CalculateAngleDifference(AntennaState antenna, AirplaneState airplane)
-        {
-            double targetHAngle = Math.Atan2(airplane.Longitude, airplane.Latitude) * 180 / Math.PI;
-            double hDiff = Math.Abs(((antenna.HorizontalAngle - targetHAngle + 180) % 360) - 180);
+            double angleDiff = Math.Abs(antenna.HorizontalAngle - CalculateHorizontalAngle(airplane));
+            angleDiff = Math.Min(angleDiff, 360 - angleDiff);
 
-            double targetVAngle = Math.Atan2(airplane.Altitude,
-                Math.Sqrt(airplane.Latitude * airplane.Latitude + airplane.Longitude * airplane.Longitude)) * 180 / Math.PI;
-            double vDiff = Math.Abs(antenna.VerticalAngle - targetVAngle);
-
-            return Math.Sqrt(hDiff * hDiff + vDiff * vDiff);
+            // Normalize edilmiş sinyal gücü (0-100 arası)
+            return Math.Max(0, 100 - (distance * 0.1) - (angleDiff * 0.5));
         }
 
         public void Reset()
         {
+            horizontalFilter.Reset();
+            verticalFilter.Reset();
             signalFilter.Reset();
-            angleFilter.Reset();
         }
     }
 }
