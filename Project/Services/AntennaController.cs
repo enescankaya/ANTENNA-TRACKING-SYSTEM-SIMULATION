@@ -9,8 +9,9 @@ namespace Project.Services
         private readonly KalmanFilter verticalFilter;
         private readonly KalmanFilter signalFilter;
         private readonly ParticleSwarmOptimizer pso;
-        private const double SIGNAL_THRESHOLD = 20.0;
+        private const double SIGNAL_THRESHOLD = 30.0; // Eşik değeri yükseltildi
         private const double MAX_VERTICAL_ANGLE = 90.0;
+        private bool isWideScanning = true; // Geniş tarama modunu takip etmek için
 
         public AntennaController()
         {
@@ -41,10 +42,11 @@ namespace Project.Services
         public void UpdateScanningAntenna(AntennaState antenna, AirplaneState airplane)
         {
             // Signal strength filtrelemesi
-            double filteredSignal = signalFilter.Update(antenna.SignalStrength);
+            double rawSignal = CalculateSignalStrength(antenna, airplane);
+            double filteredSignal = signalFilter.Update(rawSignal);
             antenna.SignalStrength = filteredSignal;
 
-            if (filteredSignal < SIGNAL_THRESHOLD)
+            if (filteredSignal < SIGNAL_THRESHOLD || isWideScanning)
             {
                 // Geniş tarama modu
                 PerformWideScan(antenna);
@@ -53,8 +55,19 @@ namespace Project.Services
             {
                 // PSO optimizasyonu ve Kalman filtresi ile hassas takip
                 double optimizedAngle = pso.GetNextAngle(filteredSignal);
+
+                // Yatay açıyı filtrele ve uygula
                 antenna.HorizontalAngle = horizontalFilter.Update(optimizedAngle);
-                antenna.VerticalAngle = verticalFilter.Update(CalculateVerticalAngle(airplane));
+
+                // Dikey açıyı hesapla ve filtrele
+                double targetVAngle = CalculateVerticalAngle(airplane);
+                antenna.VerticalAngle = verticalFilter.Update(targetVAngle);
+
+                // Signal strength yeterince iyiyse geniş taramayı kapat
+                if (filteredSignal > SIGNAL_THRESHOLD * 1.2) // %20 marj
+                {
+                    isWideScanning = false;
+                }
             }
         }
 
@@ -87,6 +100,7 @@ namespace Project.Services
                 if (nextVAngle > MAX_VERTICAL_ANGLE)
                 {
                     nextVAngle = 0; // Dikey taramayı sıfırla
+                    isWideScanning = true; // Yeni bir tarama döngüsü başlat
                 }
                 antenna.VerticalAngle = verticalFilter.Update(nextVAngle);
             }
@@ -108,18 +122,27 @@ namespace Project.Services
 
         private double CalculateSignalStrength(AntennaState antenna, AirplaneState airplane)
         {
-            // Mesafe ve açı farkına göre sinyal gücü hesaplama
+            // Mesafe hesaplama
             double distance = Math.Sqrt(
                 airplane.Latitude * airplane.Latitude +
                 airplane.Longitude * airplane.Longitude +
                 airplane.Altitude * airplane.Altitude
             );
 
-            double angleDiff = Math.Abs(antenna.HorizontalAngle - CalculateHorizontalAngle(airplane));
-            angleDiff = Math.Min(angleDiff, 360 - angleDiff);
+            // Yatay açı farkı
+            double hAngleDiff = Math.Abs(antenna.HorizontalAngle - CalculateHorizontalAngle(airplane));
+            hAngleDiff = Math.Min(hAngleDiff, 360 - hAngleDiff);
+
+            // Dikey açı farkı
+            double vAngleDiff = Math.Abs(antenna.VerticalAngle - CalculateVerticalAngle(airplane));
 
             // Normalize edilmiş sinyal gücü (0-100 arası)
-            return Math.Max(0, 100 - (distance * 0.1) - (angleDiff * 0.5));
+            double signalStrength = Math.Max(0, 100 -
+                (distance * 0.1) - // Mesafe etkisi
+                (hAngleDiff * 0.5) - // Yatay açı etkisi
+                (vAngleDiff * 0.5)); // Dikey açı etkisi
+
+            return signalStrength;
         }
 
         public void Reset()
@@ -127,6 +150,9 @@ namespace Project.Services
             horizontalFilter.Reset();
             verticalFilter.Reset();
             signalFilter.Reset();
+            isWideScanning = true;
+            // PSO'yu yeniden başlat
+            pso.GetNextAngle(0); // Reset için dummy call
         }
     }
 }
