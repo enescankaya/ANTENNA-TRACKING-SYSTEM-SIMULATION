@@ -142,31 +142,26 @@
 
     <Grid Margin="10">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="3*"/>
-            <ColumnDefinition Width="*" MinWidth="300"/>
+            <!-- Sağ panel için genişlik animasyonu -->
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto" x:Name="rightPanelColumn"/>
         </Grid.ColumnDefinitions>
 
         <!-- Map and Radar Section -->
-        <Border Grid.Column="0" 
-                Style="{StaticResource ModernPanelStyle}">
+        <Border Grid.Column="0" Style="{StaticResource ModernPanelStyle}">
             <Grid>
                 <!-- Map Control -->
                 <WindowsPresentation:GMapControl x:Name="MapControl" 
                                                Margin="5"
                                                MinZoom="2" 
                                                MaxZoom="17" 
-                                               Zoom="13"
-                                               CanDragMap="True"
-                                               MouseWheelZoomType="MousePositionAndCenter"
-                                               MouseWheelZoomEnabled="True"/>
+                                               Zoom="13"/>
 
                 <!-- Radar Overlay -->
-                <Canvas x:Name="MapCanvas" 
-                        Background="Transparent" 
-                        IsHitTestVisible="False">
-                    <!-- Radar Background -->
+                <Canvas x:Name="MapCanvas" Background="Transparent" IsHitTestVisible="False">
+                    <!-- Radar Background - Boyutu küçültüldü -->
                     <Ellipse x:Name="RadarBackground"
-                            Width="400" Height="400"
+                            Width="200" Height="200"
                             Fill="#20FFFFFF"
                             Stroke="#40FFFFFF"
                             StrokeThickness="1">
@@ -175,46 +170,43 @@
                         </Ellipse.Effect>
                     </Ellipse>
 
-                    <!-- Radar Grid Lines -->
-                    <Path x:Name="RadarGrid" 
-                          Stroke="#30FFFFFF" 
-                          StrokeThickness="1">
+                    <!-- Radar Grid Lines - Boyutu küçültüldü -->
+                    <Path x:Name="RadarGrid" Stroke="#30FFFFFF" StrokeThickness="1">
                         <Path.Data>
                             <GeometryGroup>
-                                <!-- Circular grid lines -->
-                                <EllipseGeometry Center="200,200" RadiusX="100" RadiusY="100"/>
-                                <EllipseGeometry Center="200,200" RadiusX="150" RadiusY="150"/>
-                                <!-- Cross lines -->
-                                <LineGeometry StartPoint="0,200" EndPoint="400,200"/>
-                                <LineGeometry StartPoint="200,0" EndPoint="200,400"/>
+                                <EllipseGeometry Center="100,100" RadiusX="50" RadiusY="50"/>
+                                <EllipseGeometry Center="100,100" RadiusX="75" RadiusY="75"/>
+                                <LineGeometry StartPoint="0,100" EndPoint="200,100"/>
+                                <LineGeometry StartPoint="100,0" EndPoint="100,200"/>
                             </GeometryGroup>
                         </Path.Data>
                     </Path>
 
-                    <!-- Radar Sweep -->
-                    <Path x:Name="RadarSweep" 
-                          Fill="#4000FF00">
+                    <!-- Radar Sweep - Boyutu küçültüldü -->
+                    <Path x:Name="RadarSweep" Fill="#4000FF00" Width="100" Height="100">
                         <Path.Effect>
-                            <BlurEffect Radius="10"/>
+                            <BlurEffect Radius="5"/>
                         </Path.Effect>
                     </Path>
-
-                    <!-- Signal Indicators -->
-                    <ItemsControl x:Name="SignalIndicators">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <Canvas/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
                 </Canvas>
+
+                <!-- Toggle Panel Button -->
+                <Button x:Name="TogglePanelButton"
+                        Content="⟨"
+                        Width="20"
+                        Height="60"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource ModernButtonStyle}"
+                        Click="TogglePanelButton_Click"/>
             </Grid>
         </Border>
 
-        <!-- Control Panel -->
-        <Border Grid.Column="1" 
+        <!-- Control Panel with Animation -->
+        <Border x:Name="ControlPanel" 
+                Grid.Column="1" 
                 Style="{StaticResource ModernPanelStyle}"
-                Margin="10,0,0,0">
+                Width="300">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="15">
                     <!-- Connection Panel -->

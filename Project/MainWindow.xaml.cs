@@ -11,6 +11,7 @@ using GMap.NET;
 using GMap.NET.MapProviders;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows.Media.Animation;
 
 namespace Project
 {
@@ -32,6 +33,8 @@ namespace Project
         private PointLatLng baseStationPosition;
         private bool isDragging = false;
         private Point dragStart;
+        private bool isPanelExpanded = true;
+        private readonly double PANEL_WIDTH = 300;
 
         // Görsel elemanlar için
         private Ellipse planeMarker;
@@ -62,6 +65,10 @@ namespace Project
 
         private void InitializeComponents()
         {
+            // Default IP ve Port değerleri
+            IpAddressTextBox.Text = "127.0.0.1";
+            PortTextBox.Text = "5762";
+
             scanningAntenna = new AntennaState();
             directionalAntenna = new AntennaState();
             airplane = new AirplaneState();
@@ -83,6 +90,7 @@ namespace Project
             MapControl.MouseMove += MapControl_MouseMove;
             MapControl.MouseWheel += MapControl_MouseWheel;
             DisconnectButton.Click += DisconnectButton_Click;
+            TogglePanelButton.Click += TogglePanelButton_Click;
         }
 
         private void InitializeTimer()
@@ -398,27 +406,36 @@ namespace Project
 
         private async Task UpdateRadarPosition()
         {
-            if (MapControl == null) return;
+            if (MapControl == null || airplane == null) return;
 
-            await Dispatcher.InvokeAsync(() =>
+            try
             {
-                try
-                {
-                    // Baz istasyonunun ekran koordinatlarını al
-                    GPoint baseStationPoint = MapControl.FromLatLngToLocal(baseStationPosition);
+                // Uçak pozisyonunu al
+                GPoint planePoint = MapControl.FromLatLngToLocal(new PointLatLng(airplane.Latitude, airplane.Longitude));
 
-                    // Radar pozisyonunu güncelle
-                    if (sweepPosition != null)
-                    {
-                        sweepPosition.X = baseStationPoint.X;
-                        sweepPosition.Y = baseStationPoint.Y;
-                    }
-                }
-                catch (Exception ex)
+                // Radar elemanlarını uçak pozisyonuna göre konumlandır
+                if (RadarBackground != null)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Radar position update error: {ex.Message}");
+                    Canvas.SetLeft(RadarBackground, planePoint.X - RadarBackground.Width / 2);
+                    Canvas.SetTop(RadarBackground, planePoint.Y - RadarBackground.Height / 2);
                 }
-            });
+
+                if (RadarGrid != null)
+                {
+                    Canvas.SetLeft(RadarGrid, planePoint.X - 100); // Grid merkezi için
+                    Canvas.SetTop(RadarGrid, planePoint.Y - 100);
+                }
+
+                if (RadarSweep != null)
+                {
+                    Canvas.SetLeft(RadarSweep, planePoint.X - 50); // Sweep merkezi için
+                    Canvas.SetTop(RadarSweep, planePoint.Y - 50);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Radar position update error: {ex.Message}");
+            }
         }
 
         private async void UpdateRadarRotation(double angle)
@@ -599,6 +616,21 @@ namespace Project
             {
                 MessageBox.Show($"Disconnect error: {ex.Message}");
             }
+        }
+
+        private void TogglePanelButton_Click(object sender, RoutedEventArgs e)
+        {
+            isPanelExpanded = !isPanelExpanded;
+
+            var animation = new DoubleAnimation
+            {
+                To = isPanelExpanded ? PANEL_WIDTH : 0,
+                Duration = TimeSpan.FromMilliseconds(250),
+                EasingFunction = new QuadraticEase()
+            };
+
+            ControlPanel.BeginAnimation(WidthProperty, animation);
+            TogglePanelButton.Content = isPanelExpanded ? "⟨" : "⟩";
         }
     }
 }
