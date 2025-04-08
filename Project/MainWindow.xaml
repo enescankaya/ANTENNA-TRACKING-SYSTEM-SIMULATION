@@ -193,23 +193,25 @@
                 <!-- HUD Overlay -->
 
                 <!-- Toggle Panel Button -->
-                <Button x:Name="TogglePanelButton"
-                        Content="⟨"
-                        Width="24"
-                        Height="80"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Center"
-                        Style="{StaticResource ModernButtonStyle}"
-                        Background="#80000000"
-                        Click="TogglePanelButton_Click"
-                        Panel.ZIndex="100"/>
+                <Grid x:Name="ToggleButtonContainer" 
+                      HorizontalAlignment="Right" 
+                      VerticalAlignment="Center"
+                      Panel.ZIndex="1000">
+                    <Button x:Name="TogglePanelButton"
+                            Content="⟨"
+                            Width="24"
+                            Height="80"
+                            Style="{StaticResource ModernButtonStyle}"
+                            Background="#80000000"
+                            Click="TogglePanelButton_Click"/>
+                </Grid>
 
                 <!-- Custom HUD Overlay -->
                 <Border Width="300" Height="200"
-                        HorizontalAlignment="Right"
+                        HorizontalAlignment="Center"
                         VerticalAlignment="Bottom"
                         Name="HUDContainer"
-                        Margin="20"
+                        Margin="250,20,250,20"
                         Background="#40000000"
                         BorderBrush="#2000FF00"
                         BorderThickness="1"
@@ -236,6 +238,59 @@
                                     <Line X1="30" Y1="75" X2="120" Y2="75" Stroke="White" StrokeThickness="2"/>
                                     <Line X1="50" Y1="60" X2="100" Y2="60" Stroke="White" StrokeThickness="1"/>
                                     <Line X1="50" Y1="90" X2="100" Y2="90" Stroke="White" StrokeThickness="1"/>
+
+                                    <!-- Pitch Values -->
+                                    <TextBlock x:Name="LeftPitchValue" 
+                                             Canvas.Left="10" 
+                                             Canvas.Top="45" 
+                                             Foreground="White" 
+                                             FontSize="12">
+                                        <Run Text="+10°"/>
+                                        <Run Text="→"/>
+                                    </TextBlock>
+                                    <TextBlock x:Name="RightPitchValue" 
+                                             Canvas.Right="10" 
+                                             Canvas.Top="45" 
+                                             Foreground="White" 
+                                             FontSize="12">
+                                        <Run Text="←"/>
+                                        <Run Text="+10°"/>
+                                    </TextBlock>
+
+                                    <TextBlock x:Name="LeftCurrentPitch" 
+                                             Canvas.Left="10" 
+                                             Canvas.Top="75" 
+                                             Foreground="White" 
+                                             FontSize="12">
+                                        <Run Text="0°"/>
+                                        <Run Text="→"/>
+                                    </TextBlock>
+                                    <TextBlock x:Name="RightCurrentPitch" 
+                                             Canvas.Right="10" 
+                                             Canvas.Top="75" 
+                                             Foreground="White" 
+                                             FontSize="12">
+                                        <Run Text="←"/>
+                                        <Run Text="0°"/>
+                                    </TextBlock>
+
+                                    <TextBlock x:Name="LeftLowerPitch" 
+                                             Canvas.Left="10" 
+                                             Canvas.Top="105" 
+                                             Foreground="White" 
+                                             FontSize="12">
+                                        <Run Text="-10°"/>
+                                        <Run Text="→"/>
+                                    </TextBlock>
+                                    <TextBlock x:Name="RightLowerPitch" 
+                                             Canvas.Right="10" 
+                                             Canvas.Top="105" 
+                                             Foreground="White" 
+                                             FontSize="12">
+                                        <Run Text="←"/>
+                                        <Run Text="-10°"/>
+                                    </TextBlock>
+
                                     <!-- Center Point -->
                                     <Ellipse Width="4" Height="4" Fill="Yellow" 
                                              Canvas.Left="73" Canvas.Top="73"/>
@@ -269,7 +324,7 @@
                                     CornerRadius="3" 
                                     Margin="0,2">
                                 <TextBlock x:Name="AltitudeText"
-                                          Text="ALT: --- m"
+                                          Text="ALT: --- m ↑"
                                           Foreground="#FF00FF00"
                                           FontFamily="Consolas"
                                           FontSize="14"
@@ -333,8 +388,22 @@
                                 BorderBrush="#80FFFFFF"
                                 BorderThickness="1"
                                 CornerRadius="3">
-                            <Canvas x:Name="CompassRose"
-                                    Width="280" Height="30"/>
+                            <Grid>
+                                <Canvas x:Name="CompassRose"
+                                        Width="280" Height="30"/>
+                                <!-- Current Heading Indicator -->
+                                <Border Background="#80000000" 
+                                        Width="50"
+                                        Height="24" 
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Center">
+                                    <TextBlock x:Name="CurrentHeadingText"
+                                             Foreground="Yellow"
+                                             FontSize="14"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center"/>
+                                </Border>
+                            </Grid>
                         </Border>
 
                         <!-- Speed Tape - Sol kenar -->
@@ -346,21 +415,51 @@
                                 BorderThickness="1"
                                 CornerRadius="3"
                                 Margin="-45,0,0,0">
-                            <Canvas x:Name="SpeedTape"
-                                    ClipToBounds="True"/>
+                            <Grid>
+                                <Canvas x:Name="SpeedTape" ClipToBounds="True"/>
+                                <!-- Mevcut hız göstergesi -->
+                                <Border Background="#80000000" 
+                                        Height="24" 
+                                        VerticalAlignment="Center">
+                                    <TextBlock x:Name="CurrentSpeedText"
+                                             Foreground="Yellow"
+                                             FontSize="14"
+                                             VerticalAlignment="Center"
+                                             HorizontalAlignment="Center"/>
+                                </Border>
+                            </Grid>
                         </Border>
 
                         <!-- Altitude Tape - Sağ kenar -->
                         <Border HorizontalAlignment="Right"
                                 VerticalAlignment="Center"
-                                Width="40" Height="200"
+                                Width="50" Height="200"
                                 Background="#40000000"
                                 BorderBrush="#80FFFFFF"
                                 BorderThickness="1"
                                 CornerRadius="3"
-                                Margin="0,0,-45,0"
+                                Margin="0,0,-55,0"
                                 Grid.Column="1">
-                            <Canvas x:Name="AltitudeTape"/>
+                            <Grid>
+                                <Canvas x:Name="AltitudeTape" ClipToBounds="True"/>
+                                <!-- Mevcut değer göstergesi -->
+                                <Border Background="#80000000" 
+                                        Height="24" 
+                                        VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" 
+                                              HorizontalAlignment="Center">
+                                        <TextBlock x:Name="CurrentAltitudeText"
+                                                 Foreground="Yellow"
+                                                 FontSize="14"
+                                                 VerticalAlignment="Center"
+                                                 Margin="0,0,2,0"/>
+                                        <TextBlock x:Name="AltitudeArrow"
+                                                 Foreground="Yellow"
+                                                 FontSize="14"
+                                                 VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
                         </Border>
                     </Grid>
                 </Border>

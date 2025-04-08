@@ -687,27 +687,81 @@ namespace Project
 
         private void TogglePanelButton_Click(object sender, RoutedEventArgs e)
         {
-            isPanelExpanded = !isPanelExpanded;
-
-            var animation = new DoubleAnimation
+            // Panel genişliğini animasyonlu olarak değiştir
+            DoubleAnimation animation = new DoubleAnimation
             {
-                To = isPanelExpanded ? PANEL_WIDTH : 0,
                 Duration = TimeSpan.FromMilliseconds(250),
                 EasingFunction = new QuadraticEase()
             };
 
-            animation.Completed += (s, _) =>
+            if (rightPanelColumn.Width.Value > 0)
             {
-                if (!isPanelExpanded)
-                    ControlPanel.Visibility = Visibility.Collapsed;
-            };
+                // Panel'i kapat
+                animation.To = 0;
+                TogglePanelButton.Content = "⟩";
+            }
+            else
+            {
+                // Panel'i aç
+                animation.To = PANEL_WIDTH;
+                TogglePanelButton.Content = "⟨";
+            }
 
-            if (isPanelExpanded)
-                ControlPanel.Visibility = Visibility.Visible;
+            // Grid sütun genişliğini animate et
+            rightPanelColumn.BeginAnimation(ColumnDefinition.WidthProperty,
+                new GridLengthAnimation
+                {
+                    From = rightPanelColumn.Width,
+                    To = new GridLength(animation.To.Value),
+                    Duration = animation.Duration
+                });
 
-            ControlPanel.BeginAnimation(WidthProperty, animation);
-            rightPanelColumn.Width = new GridLength(isPanelExpanded ? PANEL_WIDTH : 0);
-            TogglePanelButton.Content = isPanelExpanded ? "⟨" : "⟩";
+            // Panel genişliğini animate et
+            ControlPanel.BeginAnimation(FrameworkElement.WidthProperty, animation);
+        }
+
+        // Grid sütun genişliği için özel animasyon sınıfı
+        public class GridLengthAnimation : AnimationTimeline
+        {
+            public static readonly DependencyProperty FromProperty =
+                DependencyProperty.Register("From", typeof(GridLength), typeof(GridLengthAnimation));
+
+            public static readonly DependencyProperty ToProperty =
+                DependencyProperty.Register("To", typeof(GridLength), typeof(GridLengthAnimation));
+
+            public GridLength From
+            {
+                get { return (GridLength)GetValue(FromProperty); }
+                set { SetValue(FromProperty, value); }
+            }
+
+            public GridLength To
+            {
+                get { return (GridLength)GetValue(ToProperty); }
+                set { SetValue(ToProperty, value); }
+            }
+
+            protected override Freezable CreateInstanceCore()
+            {
+                return new GridLengthAnimation();
+            }
+
+            public override Type TargetPropertyType
+            {
+                get { return typeof(GridLength); }
+            }
+
+            public override object GetCurrentValue(object defaultOriginValue, object defaultDestinationValue, AnimationClock animationClock)
+            {
+                double fromValue = ((GridLength)GetValue(FromProperty)).Value;
+                double toValue = ((GridLength)GetValue(ToProperty)).Value;
+
+                if (animationClock.CurrentProgress == null)
+                    return null;
+
+                double progress = animationClock.CurrentProgress.Value;
+                return new GridLength((1 - progress) * fromValue + progress * toValue, GridUnitType.Pixel);
+            }
         }
 
         private void InitializeHUD()
@@ -749,6 +803,25 @@ namespace Project
                     UpdateArtificialHorizon(airplane.Pitch, airplane.Roll);
                 }
 
+                // Update pitch values
+                if (airplane != null)
+                {
+                    double currentPitch = airplane.Pitch;
+
+                    LeftPitchValue.Text = $"{currentPitch + 10:F0}° →";
+                    RightPitchValue.Text = $"← {currentPitch + 10:F0}°";
+
+                    LeftCurrentPitch.Text = $"{currentPitch:F0}° →";
+                    RightCurrentPitch.Text = $"← {currentPitch:F0}°";
+
+                    LeftLowerPitch.Text = $"{currentPitch - 10:F0}° →";
+                    RightLowerPitch.Text = $"← {currentPitch - 10:F0}°";
+                }
+
+                // Altitude with arrow indicator
+                string altitudeArrow = currentAltitude > 0 ? "↑" : currentAltitude < 0 ? "↓" : "→";
+                AltitudeText.Text = $"ALT: {altitude:F0}m {altitudeArrow}";
+
                 // Diğer HUD bileşenlerini güncelle
                 UpdateCompassRose(heading);
                 UpdateSpeedTape(speed);
@@ -774,22 +847,29 @@ namespace Project
         private void UpdateCompassRose(double heading)
         {
             CompassRose.Children.Clear();
+            CurrentHeadingText.Text = $"{heading:000}°";
 
             for (int i = 0; i < 360; i += 30)
             {
                 double adjustedAngle = (i - heading + 360) % 360;
                 double x = 140 + 130 * Math.Sin(adjustedAngle * Math.PI / 180);
+
                 if (x >= 0 && x <= 280)
                 {
                     TextBlock tickLabel = new TextBlock
                     {
-                        Text = i.ToString(),
+                        Text = i.ToString("000"),
                         Foreground = Brushes.White,
                         FontSize = 10
                     };
-                    Canvas.SetLeft(tickLabel, x - 10);
-                    Canvas.SetTop(tickLabel, 10);
-                    CompassRose.Children.Add(tickLabel);
+
+                    // Daha iyi konumlandırma için
+                    if (i != (int)heading)
+                    {
+                        Canvas.SetLeft(tickLabel, x - 10);
+                        Canvas.SetTop(tickLabel, i % 90 == 0 ? 5 : 10);
+                        CompassRose.Children.Add(tickLabel);
+                    }
                 }
             }
         }
@@ -799,36 +879,21 @@ namespace Project
             SpeedTape.Children.Clear();
             int baseSpeed = (int)speed;
 
-            // Anlık hız göstergesi (yeşil şeffaf kutu)
-            var currentSpeedIndicator = new Border
-            {
-                Width = 40,
-                Height = 20,
-                Background = new SolidColorBrush(Color.FromArgb(64, 0, 255, 0)),
-                Child = new TextBlock
-                {
-                    Text = $"{speed:F1}",
-                    Foreground = Brushes.White,
-                    FontSize = 12,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                }
-            };
-            Canvas.SetLeft(currentSpeedIndicator, 0);
-            Canvas.SetTop(currentSpeedIndicator, 90); // Merkeze yakın
-            SpeedTape.Children.Add(currentSpeedIndicator);
+            // Mevcut hız göstergesi güncelleme
+            CurrentSpeedText.Text = $"{speed:F0}";
 
-            // Diğer hız değerleri
+            // Tape değerleri
             for (int i = -5; i <= 5; i++)
             {
                 int tapeSpeed = baseSpeed + i * 5;
-                if (tapeSpeed < 0) continue;
+                if (tapeSpeed < 0 || i == 0) continue;
 
                 var text = new TextBlock
                 {
                     Text = tapeSpeed.ToString(),
                     Foreground = Brushes.White,
-                    FontSize = 12
+                    FontSize = 12,
+                    Margin = new Thickness(5, 0, 0, 0)
                 };
                 Canvas.SetLeft(text, 5);
                 Canvas.SetTop(text, 100 - i * 20);
@@ -840,18 +905,27 @@ namespace Project
         {
             AltitudeTape.Children.Clear();
             int baseAlt = (int)altitude;
+
+            // Mevcut değer göstergesi güncelleme
+            CurrentAltitudeText.Text = $"{altitude:F0}";
+            AltitudeArrow.Text = altitude > 0 ? "↑" : altitude < 0 ? "↓" : "→";
+
+            // Tape değerleri
             for (int i = -5; i <= 5; i++)
             {
                 int tapeAlt = baseAlt + i * 10;
-                var text = new TextBlock
+                if (i != 0) // Mevcut değeri atlayalım, zaten gösteriliyor
                 {
-                    Text = tapeAlt.ToString(),
-                    Foreground = Brushes.White,
-                    FontSize = 12
-                };
-                Canvas.SetRight(text, 5);
-                Canvas.SetTop(text, 100 - i * 20);
-                AltitudeTape.Children.Add(text);
+                    var text = new TextBlock
+                    {
+                        Text = tapeAlt.ToString(),
+                        Foreground = Brushes.White,
+                        FontSize = 12
+                    };
+                    Canvas.SetRight(text, 5);
+                    Canvas.SetTop(text, 100 - i * 20);
+                    AltitudeTape.Children.Add(text);
+                }
             }
         }
     }
