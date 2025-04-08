@@ -190,15 +190,179 @@
                     </Path>
                 </Canvas>
 
+                <!-- HUD Overlay -->
+
                 <!-- Toggle Panel Button -->
                 <Button x:Name="TogglePanelButton"
                         Content="⟨"
-                        Width="20"
-                        Height="60"
+                        Width="24"
+                        Height="80"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         Style="{StaticResource ModernButtonStyle}"
-                        Click="TogglePanelButton_Click"/>
+                        Background="#80000000"
+                        Click="TogglePanelButton_Click"
+                        Panel.ZIndex="100"/>
+
+                <!-- Custom HUD Overlay -->
+                <Border Width="300" Height="200"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        Name="HUDContainer"
+                        Margin="20"
+                        Background="#40000000"
+                        BorderBrush="#2000FF00"
+                        BorderThickness="1"
+                        CornerRadius="5">
+                    <Grid Name="HUDGrid">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Sol taraf - Attitude Indicator -->
+                        <Grid Grid.Column="0">
+                            <Border Background="#40000000" 
+                                    BorderBrush="#80FFFFFF"
+                                    BorderThickness="1"
+                                    CornerRadius="5">
+                                <!-- Artificial Horizon with Pitch Ladder -->
+                                <Canvas x:Name="ArtificialHorizon" 
+                                        Width="150" Height="150"
+                                        ClipToBounds="True">
+                                    <Rectangle Width="150" Height="75" Fill="#40204060" Canvas.Top="0"/>
+                                    <Rectangle Width="150" Height="75" Fill="#40604020" Canvas.Top="75"/>
+                                    <!-- Pitch Ladder Lines -->
+                                    <Line X1="30" Y1="75" X2="120" Y2="75" Stroke="White" StrokeThickness="2"/>
+                                    <Line X1="50" Y1="60" X2="100" Y2="60" Stroke="White" StrokeThickness="1"/>
+                                    <Line X1="50" Y1="90" X2="100" Y2="90" Stroke="White" StrokeThickness="1"/>
+                                    <!-- Center Point -->
+                                    <Ellipse Width="4" Height="4" Fill="Yellow" 
+                                             Canvas.Left="73" Canvas.Top="73"/>
+                                </Canvas>
+                            </Border>
+                            <!-- Bank Angle Indicator -->
+                            <Path Stroke="White" StrokeThickness="2"
+                                  Data="M 75,10 A 65,65 0 0 1 140,75"
+                                  StrokeDashArray="2,2"/>
+                            <Path x:Name="RollIndicator"
+                                  Fill="Yellow" 
+                                  Data="M 75,10 L 80,15 L 70,15 Z"/>
+                        </Grid>
+
+                        <!-- Sağ taraf - Sayısal Göstergeler -->
+                        <StackPanel Grid.Column="1" Margin="10,5">
+                            <!-- Heading -->
+                            <Border Background="#40000000" 
+                                    CornerRadius="3" 
+                                    Margin="0,2">
+                                <TextBlock x:Name="HeadingText"
+                                          Text="HDG: ---°"
+                                          Foreground="#FF00FF00"
+                                          FontFamily="Consolas"
+                                          FontSize="14"
+                                          Margin="5,2"/>
+                            </Border>
+
+                            <!-- Altitude -->
+                            <Border Background="#40000000" 
+                                    CornerRadius="3" 
+                                    Margin="0,2">
+                                <TextBlock x:Name="AltitudeText"
+                                          Text="ALT: --- m"
+                                          Foreground="#FF00FF00"
+                                          FontFamily="Consolas"
+                                          FontSize="14"
+                                          Margin="5,2"/>
+                            </Border>
+
+                            <!-- Ground Speed -->
+                            <Border Background="#40000000" 
+                                    CornerRadius="3" 
+                                    Margin="0,2">
+                                <TextBlock x:Name="SpeedText"
+                                          Text="GS: --- m/s"
+                                          Foreground="#FF00FF00"
+                                          FontFamily="Consolas"
+                                          FontSize="14"
+                                          Margin="5,2"/>
+                            </Border>
+
+                            <!-- Battery -->
+                            <Border Background="#40000000" 
+                                    CornerRadius="3" 
+                                    Margin="0,2">
+                                <Grid Margin="5,2">
+                                    <TextBlock x:Name="BatteryText"
+                                              Text="BAT: ---V"
+                                              Foreground="#FF00FF00"
+                                              FontFamily="Consolas"
+                                              FontSize="14"/>
+                                    <ProgressBar x:Name="BatteryIndicator"
+                                               Height="4"
+                                               Margin="0,20,0,0"
+                                               Maximum="100"
+                                               Value="0"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Throttle -->
+                            <Border Background="#40000000" 
+                                    CornerRadius="3" 
+                                    Margin="0,2">
+                                <Grid Margin="5,2">
+                                    <TextBlock x:Name="ThrottleText"
+                                              Text="THR: ---%"
+                                              Foreground="#FF00FF00"
+                                              FontFamily="Consolas"
+                                              FontSize="14"/>
+                                    <ProgressBar x:Name="ThrottleIndicator"
+                                               Height="4"
+                                               Margin="0,20,0,0"
+                                               Maximum="100"
+                                               Value="0"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Compass Rose with Better Visibility -->
+                        <Border Grid.ColumnSpan="2"
+                                Background="#80000000" 
+                                Height="30"
+                                VerticalAlignment="Bottom"
+                                BorderBrush="#80FFFFFF"
+                                BorderThickness="1"
+                                CornerRadius="3">
+                            <Canvas x:Name="CompassRose"
+                                    Width="280" Height="30"/>
+                        </Border>
+
+                        <!-- Speed Tape - Sol kenar -->
+                        <Border HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Width="40" Height="200"
+                                Background="#40000000"
+                                BorderBrush="#80FFFFFF"
+                                BorderThickness="1"
+                                CornerRadius="3"
+                                Margin="-45,0,0,0">
+                            <Canvas x:Name="SpeedTape"/>
+                        </Border>
+
+                        <!-- Altitude Tape - Sağ kenar -->
+                        <Border HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Width="40" Height="200"
+                                Background="#40000000"
+                                BorderBrush="#80FFFFFF"
+                                BorderThickness="1"
+                                CornerRadius="3"
+                                Margin="0,0,-45,0"
+                                Grid.Column="1">
+                            <Canvas x:Name="AltitudeTape"/>
+                        </Border>
+                    </Grid>
+                </Border>
             </Grid>
         </Border>
 

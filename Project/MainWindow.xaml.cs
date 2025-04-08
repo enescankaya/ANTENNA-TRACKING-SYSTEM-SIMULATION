@@ -45,6 +45,13 @@ namespace Project
         private DateTime lastMapCenterUpdate = DateTime.MinValue;
         private const int MAP_CENTER_INTERVAL = 5000; // 5 seconds in milliseconds
 
+        private RotateTransform attitudeTransform;
+        private double currentHeading;
+        private double currentAltitude;
+        private double currentSpeed;
+        private double currentBattery = 100;
+        private double currentThrottle;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -61,6 +68,7 @@ namespace Project
             SetupEventHandlers();
             InitializeVisuals();
             InitializeTimer();
+            InitializeHUD();
         }
 
         private void InitializeComponents()
@@ -187,7 +195,7 @@ namespace Project
                 directionLine.X1 = screenPoint.X;
                 directionLine.Y1 = screenPoint.Y;
                 directionLine.X2 = screenPoint.X + length * Math.Cos(angleRad);
-                directionLine.Y2 = screenPoint.Y + length * Math.Sin(angleRad);
+                directionLine.Y2 = screenPoint.X + length * Math.Sin(angleRad);
 
                 if (sweepPosition != null)
                 {
@@ -268,11 +276,19 @@ namespace Project
                     antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
                     antennaController.UpdateDirectionalAntenna(directionalAntenna, airplane);
 
-                    // Update UI
+                    // Update UI including HUD
                     Dispatcher.Invoke(() =>
                     {
                         UpdateAntennaDisplay();
                         UpdateMap();
+                        UpdateHUD(
+                            airplane.Heading,
+                            airplane.Altitude,
+                            Math.Sqrt(Math.Pow(airplane.Latitude - baseStationPosition.Lat, 2) +
+                                    Math.Pow(airplane.Longitude - baseStationPosition.Lng, 2)) * 111000, // Approx speed
+                            currentBattery,
+                            currentThrottle
+                        );
                     });
                 }
             }
@@ -631,6 +647,70 @@ namespace Project
 
             ControlPanel.BeginAnimation(WidthProperty, animation);
             TogglePanelButton.Content = isPanelExpanded ? "⟨" : "⟩";
+        }
+
+        private void InitializeHUD()
+        {
+            attitudeTransform = new RotateTransform();
+            if (ArtificialHorizon != null)
+            {
+                ArtificialHorizon.RenderTransform = attitudeTransform;
+            }
+            UpdateHUD(0, 100, 0, 100, 50); // Initial values
+        }
+
+        private void UpdateHUD(double heading, double altitude, double speed, double battery, double throttle)
+        {
+            currentHeading = heading;
+            currentAltitude = altitude;
+            currentSpeed = speed;
+            currentBattery = battery;
+            currentThrottle = throttle;
+
+            Dispatcher.Invoke(() =>
+            {
+                // Update text displays
+                HeadingText.Text = $"HDG: {heading:F1}°";
+                AltitudeText.Text = $"ALT: {altitude:F0}m";
+                SpeedText.Text = $"GS: {speed:F1}m/s";
+                BatteryText.Text = $"BAT: {battery:F1}V";
+                ThrottleText.Text = $"THR: {throttle:F0}%";
+
+                // Update progress bars
+                BatteryIndicator.Value = battery;
+                ThrottleIndicator.Value = throttle;
+
+                // Update attitude indicator
+                double pitch = Math.Sin(DateTime.Now.Second * Math.PI / 30) * 20; // Demo pitch animation
+                double roll = Math.Sin(DateTime.Now.Second * Math.PI / 15) * 30;  // Demo roll animation
+                attitudeTransform.Angle = roll;
+
+                // Update compass rose
+                UpdateCompassRose(heading);
+            });
+        }
+
+        private void UpdateCompassRose(double heading)
+        {
+            CompassRose.Children.Clear();
+
+            for (int i = 0; i < 360; i += 30)
+            {
+                double adjustedAngle = (i - heading + 360) % 360;
+                double x = 140 + 130 * Math.Sin(adjustedAngle * Math.PI / 180);
+                if (x >= 0 && x <= 280)
+                {
+                    TextBlock tickLabel = new TextBlock
+                    {
+                        Text = i.ToString(),
+                        Foreground = Brushes.White,
+                        FontSize = 10
+                    };
+                    Canvas.SetLeft(tickLabel, x - 10);
+                    Canvas.SetTop(tickLabel, 10);
+                    CompassRose.Children.Add(tickLabel);
+                }
+            }
         }
     }
 }
