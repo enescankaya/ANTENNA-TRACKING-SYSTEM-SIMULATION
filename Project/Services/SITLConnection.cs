@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Net.Sockets;
 using System.Threading.Tasks;
+using System.IO;
 using Project.Models;
 
 namespace Project.Services
@@ -10,6 +11,8 @@ namespace Project.Services
         private TcpClient client;
         private NetworkStream stream;
         private bool isConnected;
+        private readonly MAVLink.MavlinkParse mavlinkParser = new MAVLink.MavlinkParse();
+        private AirplaneState currentState;
 
         public event EventHandler<AirplaneState> OnPositionUpdate;
         public event EventHandler<string> OnConnectionStatusChanged;
@@ -57,15 +60,47 @@ namespace Project.Services
         {
             try
             {
-                // Test amaçlı olarak Keşan Havalimanı'nda uçuş simülasyonu
-                var state = new AirplaneState
+                using (var memStream = new MemoryStream(buffer, 0, bytesRead))
                 {
-                    Latitude = 40.737222 + (Math.Sin(DateTime.Now.Second * Math.PI / 30) * 0.001),
-                    Longitude = 26.571667 + (Math.Cos(DateTime.Now.Second * Math.PI / 30) * 0.001),
-                    Altitude = 100 + Math.Sin(DateTime.Now.Second * Math.PI / 15) * 10,
-                    Heading = (DateTime.Now.Second * 6) % 360
-                };
-                OnPositionUpdate?.Invoke(this, state);
+                    var message = mavlinkParser.ReadPacket(memStream);
+                    if (message == null) return;
+
+                    // Eğer currentState null ise yeni oluştur
+                    if (currentState == null) currentState = new AirplaneState();
+
+                    switch (message.msgid)
+                    {
+                        case (uint)MAVLink.MAVLINK_MSG_ID.GLOBAL_POSITION_INT:
+                            var pos = (MAVLink.mavlink_global_position_int_t)message.data;
+                            currentState.Latitude = pos.lat / 1E7;
+                            currentState.Longitude = pos.lon / 1E7;
+                            currentState.Altitude = pos.relative_alt / 1000.0f;
+                            currentState.Heading = pos.hdg / 100.0f;
+                            break;
+
+                        case (uint)MAVLink.MAVLINK_MSG_ID.ATTITUDE:
+                            var att = (MAVLink.mavlink_attitude_t)message.data;
+                            currentState.Pitch = att.pitch * 180.0f / (float)Math.PI;
+                            currentState.Roll = att.roll * 180.0f / (float)Math.PI;
+                            break;
+
+                        case (uint)MAVLink.MAVLINK_MSG_ID.VFR_HUD:
+                            var hud = (MAVLink.mavlink_vfr_hud_t)message.data;
+                            currentState.AirSpeed = hud.airspeed;
+                            currentState.GroundSpeed = hud.groundspeed;
+                            currentState.ClimbRate = hud.climb;
+                            currentState.Throttle = hud.throttle;
+                            break;
+
+                        case (uint)MAVLink.MAVLINK_MSG_ID.BATTERY_STATUS:
+                            var bat = (MAVLink.mavlink_battery_status_t)message.data;
+                            currentState.Battery = bat.voltages[0] / 1000.0f;
+                            break;
+                    }
+
+                    // Her mesaj sonrası state'i gönder
+                    OnPositionUpdate?.Invoke(this, currentState);
+                }
             }
             catch (Exception ex)
             {
@@ -80,5 +115,7 @@ namespace Project.Services
             client?.Close();
             OnConnectionStatusChanged?.Invoke(this, "Disconnected");
         }
+
+        public bool IsConnected => isConnected;
     }
 }

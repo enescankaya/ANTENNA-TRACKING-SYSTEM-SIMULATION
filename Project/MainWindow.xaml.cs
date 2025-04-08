@@ -30,6 +30,7 @@ namespace Project
         private readonly KalmanFilter angleFilter;
         private readonly AntennaController antennaController;
         private DispatcherTimer updateTimer;
+        private DispatcherTimer hudUpdateTimer;
         private PointLatLng baseStationPosition;
         private bool isDragging = false;
         private Point dragStart;
@@ -108,6 +109,13 @@ namespace Project
                 Interval = TimeSpan.FromMilliseconds(100)
             };
             updateTimer.Tick += UpdateTimer_Tick;
+
+            // HUD için timer güncellemesi - interval 100ms yapıldı
+            hudUpdateTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(100) // Daha sık güncelleme
+            };
+            hudUpdateTimer.Tick += HudUpdateTimer_Tick;
         }
 
         private void InitializeVisuals()
@@ -238,19 +246,28 @@ namespace Project
 
         private void StartButton_Click(object sender, RoutedEventArgs e)
         {
+            if (!sitlConnection.IsConnected)
+            {
+                MessageBox.Show("Please connect to vehicle first!");
+                return;
+            }
+
             isScanning = !isScanning;
             StartButton.Content = isScanning ? "Stop Scanning" : "Start Scanning";
 
             if (isScanning)
             {
-                // Keşan Havalimanı'na odaklan
                 MapControl.Position = baseStationPosition;
                 MapControl.Zoom = 16;
                 updateTimer.Start();
+                hudUpdateTimer.Start();
+                SystemStatus.Text = "System Active";
             }
             else
             {
                 updateTimer.Stop();
+                hudUpdateTimer.Stop();
+                SystemStatus.Text = "System Stopped";
             }
         }
 
@@ -269,26 +286,20 @@ namespace Project
             try
             {
                 airplane = e;
+                currentHeading = airplane.Heading;
+                currentAltitude = airplane.Altitude;
+                currentSpeed = airplane.GroundSpeed;
+                currentBattery = airplane.Battery;
+                currentThrottle = airplane.Throttle;
 
+                // Her MAVLink mesajıyla HUD'u güncelle
                 if (isScanning)
                 {
-                    // Update antenna states
-                    antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
-                    antennaController.UpdateDirectionalAntenna(directionalAntenna, airplane);
-
-                    // Update UI including HUD
                     Dispatcher.Invoke(() =>
                     {
                         UpdateAntennaDisplay();
                         UpdateMap();
-                        UpdateHUD(
-                            airplane.Heading,
-                            airplane.Altitude,
-                            Math.Sqrt(Math.Pow(airplane.Latitude - baseStationPosition.Lat, 2) +
-                                    Math.Pow(airplane.Longitude - baseStationPosition.Lng, 2)) * 111000, // Approx speed
-                            currentBattery,
-                            currentThrottle
-                        );
+                        UpdateHUD(currentHeading, currentAltitude, currentSpeed, currentBattery, currentThrottle);
                     });
                 }
             }
@@ -317,6 +328,30 @@ namespace Project
             UpdateAntennaDisplay();
             UpdateMap();
             _ = UpdateRadarPosition(); // Fire and forget async call
+        }
+
+        private void HudUpdateTimer_Tick(object sender, EventArgs e)
+        {
+            if (airplane != null && sitlConnection.IsConnected)
+            {
+                try
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        UpdateHUD(
+                            currentHeading,
+                            currentAltitude,
+                            currentSpeed,
+                            currentBattery,
+                            currentThrottle
+                        );
+                    });
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"HUD timer error: {ex.Message}");
+                }
+            }
         }
 
         private void UpdateAntennaPositions()
@@ -645,7 +680,17 @@ namespace Project
                 EasingFunction = new QuadraticEase()
             };
 
+            animation.Completed += (s, _) =>
+            {
+                if (!isPanelExpanded)
+                    ControlPanel.Visibility = Visibility.Collapsed;
+            };
+
+            if (isPanelExpanded)
+                ControlPanel.Visibility = Visibility.Visible;
+
             ControlPanel.BeginAnimation(WidthProperty, animation);
+            rightPanelColumn.Width = new GridLength(isPanelExpanded ? PANEL_WIDTH : 0);
             TogglePanelButton.Content = isPanelExpanded ? "⟨" : "⟩";
         }
 
@@ -661,33 +706,60 @@ namespace Project
 
         private void UpdateHUD(double heading, double altitude, double speed, double battery, double throttle)
         {
-            currentHeading = heading;
-            currentAltitude = altitude;
-            currentSpeed = speed;
-            currentBattery = battery;
-            currentThrottle = throttle;
+            if (!sitlConnection.IsConnected) return;
 
             Dispatcher.Invoke(() =>
             {
-                // Update text displays
-                HeadingText.Text = $"HDG: {heading:F1}°";
-                AltitudeText.Text = $"ALT: {altitude:F0}m";
-                SpeedText.Text = $"GS: {speed:F1}m/s";
-                BatteryText.Text = $"BAT: {battery:F1}V";
-                ThrottleText.Text = $"THR: {throttle:F0}%";
+                try
+                {
+                    // Heading formatı (000° - 359°)
+                    HeadingText.Text = $"HDG: {heading:000}°";
 
-                // Update progress bars
-                BatteryIndicator.Value = battery;
-                ThrottleIndicator.Value = throttle;
+                    // Altitude formatı (±00000)
+                    AltitudeText.Text = $"ALT: {altitude:F0}m";
 
-                // Update attitude indicator
-                double pitch = Math.Sin(DateTime.Now.Second * Math.PI / 30) * 20; // Demo pitch animation
-                double roll = Math.Sin(DateTime.Now.Second * Math.PI / 15) * 30;  // Demo roll animation
-                attitudeTransform.Angle = roll;
+                    // Ground Speed (gerçek değer)
+                    SpeedText.Text = $"GS: {speed:F1}m/s";
 
-                // Update compass rose
-                UpdateCompassRose(heading);
+                    // Battery formatı (00.0V)
+                    BatteryText.Text = $"BAT: {battery:F1}V";
+
+                    // Throttle formatı (000%)
+                    ThrottleText.Text = $"THR: {throttle:F0}%";
+
+                    // Progress barları güncelle
+                    BatteryIndicator.Value = battery;
+                    ThrottleIndicator.Value = throttle;
+
+                    // Artificial horizon güncelle
+                    if (airplane != null)
+                    {
+                        UpdateArtificialHorizon(airplane.Pitch, airplane.Roll);
+                    }
+
+                    // Compass rose güncelle
+                    UpdateCompassRose(heading);
+
+                    // Speed ve Altitude tape'leri güncelle
+                    UpdateSpeedTape(speed);
+                    UpdateAltitudeTape(altitude);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"HUD update error: {ex.Message}");
+                }
             });
+        }
+
+        private void UpdateArtificialHorizon(double pitch, double roll)
+        {
+            var transform = new TransformGroup();
+            transform.Children.Add(new RotateTransform(roll, 75, 75));
+
+            // Pitch için y-ekseni kaydırma
+            transform.Children.Add(new TranslateTransform(0, pitch));
+
+            ArtificialHorizon.RenderTransform = transform;
         }
 
         private void UpdateCompassRose(double heading)
@@ -710,6 +782,67 @@ namespace Project
                     Canvas.SetTop(tickLabel, 10);
                     CompassRose.Children.Add(tickLabel);
                 }
+            }
+        }
+
+        private void UpdateSpeedTape(double speed)
+        {
+            SpeedTape.Children.Clear();
+            int baseSpeed = (int)speed;
+
+            // Anlık hız göstergesi (yeşil şeffaf kutu)
+            var currentSpeedIndicator = new Border
+            {
+                Width = 40,
+                Height = 20,
+                Background = new SolidColorBrush(Color.FromArgb(64, 0, 255, 0)),
+                Child = new TextBlock
+                {
+                    Text = $"{speed:F1}",
+                    Foreground = Brushes.White,
+                    FontSize = 12,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            };
+            Canvas.SetLeft(currentSpeedIndicator, 0);
+            Canvas.SetTop(currentSpeedIndicator, 90); // Merkeze yakın
+            SpeedTape.Children.Add(currentSpeedIndicator);
+
+            // Diğer hız değerleri
+            for (int i = -5; i <= 5; i++)
+            {
+                int tapeSpeed = baseSpeed + i * 5;
+                if (tapeSpeed < 0) continue;
+
+                var text = new TextBlock
+                {
+                    Text = tapeSpeed.ToString(),
+                    Foreground = Brushes.White,
+                    FontSize = 12
+                };
+                Canvas.SetLeft(text, 5);
+                Canvas.SetTop(text, 100 - i * 20);
+                SpeedTape.Children.Add(text);
+            }
+        }
+
+        private void UpdateAltitudeTape(double altitude)
+        {
+            AltitudeTape.Children.Clear();
+            int baseAlt = (int)altitude;
+            for (int i = -5; i <= 5; i++)
+            {
+                int tapeAlt = baseAlt + i * 10;
+                var text = new TextBlock
+                {
+                    Text = tapeAlt.ToString(),
+                    Foreground = Brushes.White,
+                    FontSize = 12
+                };
+                Canvas.SetRight(text, 5);
+                Canvas.SetTop(text, 100 - i * 20);
+                AltitudeTape.Children.Add(text);
             }
         }
     }
