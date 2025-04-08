@@ -106,14 +106,13 @@ namespace Project
         {
             updateTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(100)
+                Interval = TimeSpan.FromMilliseconds(500) // 500ms'e çıkarıldı
             };
             updateTimer.Tick += UpdateTimer_Tick;
 
-            // HUD için timer güncellemesi - interval 100ms yapıldı
             hudUpdateTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(100) // Daha sık güncelleme
+                Interval = TimeSpan.FromMilliseconds(500) // 500ms'e çıkarıldı
             };
             hudUpdateTimer.Tick += HudUpdateTimer_Tick;
         }
@@ -283,25 +282,33 @@ namespace Project
 
         private void SitlConnection_OnPositionUpdate(object sender, AirplaneState e)
         {
+            if (e == null) return;
+
             try
             {
                 airplane = e;
-                currentHeading = airplane.Heading;
-                currentAltitude = airplane.Altitude;
-                currentSpeed = airplane.GroundSpeed;
-                currentBattery = airplane.Battery;
-                currentThrottle = airplane.Throttle;
+                currentHeading = e.Heading;
+                currentAltitude = e.Altitude;
+                currentSpeed = e.GroundSpeed;
+                currentBattery = e.Battery;
+                currentThrottle = e.Throttle;
 
-                // Her MAVLink mesajıyla HUD'u güncelle
-                if (isScanning)
+                if (!isScanning) return;
+
+                // UI güncellemelerini tek bir Dispatcher çağrısında topla
+                Dispatcher.InvokeAsync(() =>
                 {
-                    Dispatcher.Invoke(() =>
+                    try
                     {
                         UpdateAntennaDisplay();
                         UpdateMap();
                         UpdateHUD(currentHeading, currentAltitude, currentSpeed, currentBattery, currentThrottle);
-                    });
-                }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"UI update error: {ex.Message}");
+                    }
+                }, System.Windows.Threading.DispatcherPriority.Render);
             }
             catch (Exception ex)
             {
@@ -318,16 +325,25 @@ namespace Project
         {
             if (!isScanning || airplane == null) return;
 
-            await Task.Run(() =>
+            try
             {
-                antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
-                antennaController.UpdateDirectionalAntenna(directionalAntenna, airplane);
-            });
+                await Task.Run(() =>
+                {
+                    antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
+                    antennaController.UpdateDirectionalAntenna(directionalAntenna, airplane);
+                });
 
-            // UI güncellemeleri
-            UpdateAntennaDisplay();
-            UpdateMap();
-            _ = UpdateRadarPosition(); // Fire and forget async call
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    UpdateAntennaDisplay();
+                    UpdateMap();
+                    UpdateRadarPosition();
+                }, System.Windows.Threading.DispatcherPriority.Render);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Update timer error: {ex.Message}");
+            }
         }
 
         private void HudUpdateTimer_Tick(object sender, EventArgs e)
@@ -706,49 +722,42 @@ namespace Project
 
         private void UpdateHUD(double heading, double altitude, double speed, double battery, double throttle)
         {
-            if (!sitlConnection.IsConnected) return;
-
-            Dispatcher.Invoke(() =>
+            try
             {
-                try
+                // Heading update (0-360 aralığında normalize et)
+                heading = ((heading % 360) + 360) % 360;
+                HeadingText.Text = $"HDG: {heading:000}°";
+
+                // Altitude update (en yakın tam sayıya yuvarla)
+                altitude = Math.Round(altitude, 0);
+                AltitudeText.Text = $"ALT: {altitude:F0}m";
+
+                // Ground Speed update (bir ondalık basamak)
+                SpeedText.Text = $"GS: {speed:F1}m/s";
+
+                // Battery update (bir ondalık basamak)
+                BatteryText.Text = $"BAT: {battery:F1}V";
+                BatteryIndicator.Value = Math.Max(0, Math.Min(100, battery * 10)); // 0-100 arasına normalize et
+
+                // Throttle update (tam sayı)
+                ThrottleText.Text = $"THR: {throttle:F0}%";
+                ThrottleIndicator.Value = Math.Max(0, Math.Min(100, throttle));
+
+                // Artificial horizon güncelleme
+                if (airplane != null)
                 {
-                    // Heading formatı (000° - 359°)
-                    HeadingText.Text = $"HDG: {heading:000}°";
-
-                    // Altitude formatı (±00000)
-                    AltitudeText.Text = $"ALT: {altitude:F0}m";
-
-                    // Ground Speed (gerçek değer)
-                    SpeedText.Text = $"GS: {speed:F1}m/s";
-
-                    // Battery formatı (00.0V)
-                    BatteryText.Text = $"BAT: {battery:F1}V";
-
-                    // Throttle formatı (000%)
-                    ThrottleText.Text = $"THR: {throttle:F0}%";
-
-                    // Progress barları güncelle
-                    BatteryIndicator.Value = battery;
-                    ThrottleIndicator.Value = throttle;
-
-                    // Artificial horizon güncelle
-                    if (airplane != null)
-                    {
-                        UpdateArtificialHorizon(airplane.Pitch, airplane.Roll);
-                    }
-
-                    // Compass rose güncelle
-                    UpdateCompassRose(heading);
-
-                    // Speed ve Altitude tape'leri güncelle
-                    UpdateSpeedTape(speed);
-                    UpdateAltitudeTape(altitude);
+                    UpdateArtificialHorizon(airplane.Pitch, airplane.Roll);
                 }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"HUD update error: {ex.Message}");
-                }
-            });
+
+                // Diğer HUD bileşenlerini güncelle
+                UpdateCompassRose(heading);
+                UpdateSpeedTape(speed);
+                UpdateAltitudeTape(altitude);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"HUD update error: {ex.Message}");
+            }
         }
 
         private void UpdateArtificialHorizon(double pitch, double roll)
