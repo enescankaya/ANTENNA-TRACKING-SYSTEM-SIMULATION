@@ -122,27 +122,36 @@ namespace Project.Services
 
         private double CalculateSignalStrength(AntennaState antenna, AirplaneState airplane)
         {
-            // Mesafe hesaplama
+            // Hedef açıları hesapla
+            double targetHAngle = CalculateHorizontalAngle(airplane);
+            double targetVAngle = CalculateVerticalAngle(airplane);
+
+            // Açı farkları
+            double hAngleDiff = Math.Abs(antenna.HorizontalAngle - targetHAngle);
+            hAngleDiff = Math.Min(hAngleDiff, 360 - hAngleDiff); // En kısa açı farkı
+            double vAngleDiff = Math.Abs(antenna.VerticalAngle - targetVAngle);
+
+            // 3D mesafe hesaplama (normalize edilmiş koordinatlar)
             double distance = Math.Sqrt(
-                airplane.Latitude * airplane.Latitude +
-                airplane.Longitude * airplane.Longitude +
-                airplane.Altitude * airplane.Altitude
+                Math.Pow(airplane.Latitude * 0.0001, 2) +
+                Math.Pow(airplane.Longitude * 0.0001, 2) +
+                Math.Pow(airplane.Altitude * 0.01, 2)
             );
 
-            // Yatay açı farkı
-            double hAngleDiff = Math.Abs(antenna.HorizontalAngle - CalculateHorizontalAngle(airplane));
-            hAngleDiff = Math.Min(hAngleDiff, 360 - hAngleDiff);
+            // Açı bazlı zayıflama
+            double angleAttenuation = Math.Max(0, 1.0 - (hAngleDiff / 180.0) - (vAngleDiff / 90.0));
 
-            // Dikey açı farkı
-            double vAngleDiff = Math.Abs(antenna.VerticalAngle - CalculateVerticalAngle(airplane));
+            // Mesafe bazlı zayıflama (ters kare kanunu)
+            double distanceAttenuation = 1.0 / (1.0 + distance * distance);
 
-            // Normalize edilmiş sinyal gücü (0-100 arası)
-            double signalStrength = Math.Max(0, 100 -
-                (distance * 0.1) - // Mesafe etkisi
-                (hAngleDiff * 0.5) - // Yatay açı etkisi
-                (vAngleDiff * 0.5)); // Dikey açı etkisi
+            // Toplam sinyal gücü (0-100 arası)
+            double signalStrength = (angleAttenuation * 0.7 + distanceAttenuation * 0.3) * 100;
 
-            return signalStrength;
+            // Gürültü ekleme
+            Random random = new Random();
+            signalStrength += (random.NextDouble() - 0.5) * 5; // ±2.5 gürültü
+
+            return Math.Max(0, Math.Min(100, signalStrength));
         }
 
         public void Reset()

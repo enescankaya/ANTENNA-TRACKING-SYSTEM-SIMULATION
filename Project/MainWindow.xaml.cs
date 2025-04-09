@@ -331,6 +331,7 @@ namespace Project
                 {
                     antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
                     antennaController.UpdateDirectionalAntenna(directionalAntenna, airplane);
+                    UpdateAntennaPositions(); // Bu satırı ekledik
                 });
 
                 await Dispatcher.InvokeAsync(() =>
@@ -383,10 +384,25 @@ namespace Project
 
         private double CalculateSignalStrength(double angle)
         {
-            // Simulate signal strength based on antenna angle and airplane position
-            // This is a simplified calculation - actual implementation would be more complex
+            if (airplane == null) return 0;
+
+            // Açı farkını hesapla
             double angleDiff = Math.Abs(angle - airplane.Heading);
-            return Math.Max(0, 100 - (angleDiff / 360.0 * 100));
+            angleDiff = Math.Min(angleDiff, 360 - angleDiff); // En kısa açı farkını al
+
+            // Mesafe bazlı zayıflama
+            double distance = Math.Sqrt(
+                Math.Pow(airplane.Latitude - baseStationPosition.Lat, 2) +
+                Math.Pow(airplane.Longitude - baseStationPosition.Lng, 2)
+            );
+
+            // Açı ve mesafe bazlı sinyal gücü hesaplama
+            double angleAttenuation = Math.Max(0, 1.0 - (angleDiff / 180.0));
+            double distanceAttenuation = Math.Max(0, 1.0 - (distance * 0.1)); // Mesafe faktörü
+
+            // Toplam sinyal gücü (0-100 arası)
+            return Math.Max(0, Math.Min(100,
+                (angleAttenuation * 70 + distanceAttenuation * 30))); // Açı daha önemli
         }
 
         private void UpdateAntennaDisplay()
@@ -833,45 +849,69 @@ namespace Project
             }
         }
 
-        private void UpdateArtificialHorizon(double pitch, double roll)
-        {
-            var transform = new TransformGroup();
-            transform.Children.Add(new RotateTransform(roll, 75, 75));
-
-            // Pitch için y-ekseni kaydırma
-            transform.Children.Add(new TranslateTransform(0, pitch));
-
-            ArtificialHorizon.RenderTransform = transform;
-        }
-
         private void UpdateCompassRose(double heading)
         {
             CompassRose.Children.Clear();
             CurrentHeadingText.Text = $"{heading:000}°";
 
-            for (int i = 0; i < 360; i += 30)
+            double centerAngle = ((int)heading + 360) % 360;
+            int start = ((int)centerAngle - 45 + 360) % 360;
+            int end = ((int)centerAngle + 45 + 360) % 360;
+
+            for (int i = start; i <= start + 90; i += 30)
             {
-                double adjustedAngle = (i - heading + 360) % 360;
+                int displayAngle = ((i % 360) + 360) % 360;
+                double adjustedAngle = (displayAngle - heading + 360) % 360;
                 double x = 140 + 130 * Math.Sin(adjustedAngle * Math.PI / 180);
 
                 if (x >= 0 && x <= 280)
                 {
                     TextBlock tickLabel = new TextBlock
                     {
-                        Text = i.ToString("000"),
+                        Text = displayAngle.ToString("000"),
                         Foreground = Brushes.White,
                         FontSize = 10
                     };
 
-                    // Daha iyi konumlandırma için
-                    if (i != (int)heading)
-                    {
-                        Canvas.SetLeft(tickLabel, x - 10);
-                        Canvas.SetTop(tickLabel, i % 90 == 0 ? 5 : 10);
-                        CompassRose.Children.Add(tickLabel);
-                    }
+                    Canvas.SetLeft(tickLabel, x - 10);
+                    Canvas.SetTop(tickLabel, displayAngle % 90 == 0 ? 5 : 10);
+                    CompassRose.Children.Add(tickLabel);
                 }
             }
+        }
+
+        private void UpdateArtificialHorizon(double pitch, double roll)
+        {
+            var transform = new TransformGroup();
+            transform.Children.Add(new RotateTransform(roll, 75, 75));
+
+            // Pitch değerlerini çizgilerle aynı hizaya getir
+            double baselineY = 75; // Merkez çizginin Y koordinatı
+            double pixelsPerDegree = 2.0; // Her derece için piksel değeri
+            double topLineY = 45;    // Üst çizginin Y koordinatı
+            double bottomLineY = 105; // Alt çizginin Y koordinatı
+
+            // Üst pitch değerleri
+            Canvas.SetLeft(LeftPitchValue, 5);
+            Canvas.SetTop(LeftPitchValue, topLineY - 6); // -6 text height/2 için offset
+            Canvas.SetRight(RightPitchValue, 5);
+            Canvas.SetTop(RightPitchValue, topLineY - 6);
+
+            // Orta pitch değerleri
+            Canvas.SetLeft(LeftCurrentPitch, 5);
+            Canvas.SetTop(LeftCurrentPitch, baselineY - 6);
+            Canvas.SetRight(RightCurrentPitch, 5);
+            Canvas.SetTop(RightCurrentPitch, baselineY - 6);
+
+            // Alt pitch değerleri
+            Canvas.SetLeft(LeftLowerPitch, 5);
+            Canvas.SetTop(LeftLowerPitch, bottomLineY - 6);
+            Canvas.SetRight(RightLowerPitch, 5);
+            Canvas.SetTop(RightLowerPitch, bottomLineY - 6);
+
+            // Pitch açısına göre kaydırma
+            transform.Children.Add(new TranslateTransform(0, pitch * pixelsPerDegree));
+            ArtificialHorizon.RenderTransform = transform;
         }
 
         private void UpdateSpeedTape(double speed)

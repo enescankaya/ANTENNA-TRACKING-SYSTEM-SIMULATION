@@ -234,59 +234,57 @@
                                         ClipToBounds="True">
                                     <Rectangle Width="150" Height="75" Fill="#40204060" Canvas.Top="0"/>
                                     <Rectangle Width="150" Height="75" Fill="#40604020" Canvas.Top="75"/>
-                                    <!-- Pitch Ladder Lines -->
-                                    <Line X1="30" Y1="75" X2="120" Y2="75" Stroke="White" StrokeThickness="2"/>
-                                    <Line X1="50" Y1="60" X2="100" Y2="60" Stroke="White" StrokeThickness="1"/>
-                                    <Line X1="50" Y1="90" X2="100" Y2="90" Stroke="White" StrokeThickness="1"/>
 
-                                    <!-- Pitch Values -->
+                                    <!-- Pitch Ladder Lines -->
+                                    <Line X1="30" Y1="45" X2="120" Y2="45" Stroke="White" StrokeThickness="1"/>
+                                    <!-- +10 derece -->
+                                    <Line X1="30" Y1="75" X2="120" Y2="75" Stroke="White" StrokeThickness="2"/>
+                                    <!-- 0 derece -->
+                                    <Line X1="30" Y1="105" X2="120" Y2="105" Stroke="White" StrokeThickness="1"/>
+                                    <!-- -10 derece -->
+
+                                    <!-- Pitch Values - Canvas.Left ve Canvas.Top değerleri UpdateArtificialHorizon'da dinamik olarak ayarlanacak -->
                                     <TextBlock x:Name="LeftPitchValue" 
-                                             Canvas.Left="10" 
-                                             Canvas.Top="45" 
-                                             Foreground="White" 
-                                             FontSize="12">
+                                              Canvas.Left="5" 
+                                              Foreground="White" 
+                                              FontSize="12">
                                         <Run Text="+10°"/>
                                         <Run Text="→"/>
                                     </TextBlock>
                                     <TextBlock x:Name="RightPitchValue" 
-                                             Canvas.Right="10" 
-                                             Canvas.Top="45" 
-                                             Foreground="White" 
-                                             FontSize="12">
+                                              Canvas.Right="5" 
+                                              Foreground="White" 
+                                              FontSize="12">
                                         <Run Text="←"/>
                                         <Run Text="+10°"/>
                                     </TextBlock>
 
                                     <TextBlock x:Name="LeftCurrentPitch" 
-                                             Canvas.Left="10" 
-                                             Canvas.Top="75" 
-                                             Foreground="White" 
-                                             FontSize="12">
+                                              Canvas.Left="5" 
+                                              Foreground="White" 
+                                              FontSize="12">
                                         <Run Text="0°"/>
                                         <Run Text="→"/>
                                     </TextBlock>
                                     <TextBlock x:Name="RightCurrentPitch" 
-                                             Canvas.Right="10" 
-                                             Canvas.Top="75" 
-                                             Foreground="White" 
-                                             FontSize="12">
+                                              Canvas.Right="5" 
+                                              Foreground="White" 
+                                              FontSize="12">
                                         <Run Text="←"/>
                                         <Run Text="0°"/>
                                     </TextBlock>
 
                                     <TextBlock x:Name="LeftLowerPitch" 
-                                             Canvas.Left="10" 
-                                             Canvas.Top="105" 
-                                             Foreground="White" 
-                                             FontSize="12">
+                                              Canvas.Left="5" 
+                                              Foreground="White" 
+                                              FontSize="12">
                                         <Run Text="-10°"/>
                                         <Run Text="→"/>
                                     </TextBlock>
                                     <TextBlock x:Name="RightLowerPitch" 
-                                             Canvas.Right="10" 
-                                             Canvas.Top="105" 
-                                             Foreground="White" 
-                                             FontSize="12">
+                                              Canvas.Right="5" 
+                                              Foreground="White" 
+                                              FontSize="12">
                                         <Run Text="←"/>
                                         <Run Text="-10°"/>
                                     </TextBlock>
