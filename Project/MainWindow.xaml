@@ -469,7 +469,7 @@
                 Grid.Column="1" 
                 Style="{StaticResource ModernPanelStyle}"
                 Width="300">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ScrollViewer VerticalScrollBarVisibility="Hidden">
                 <StackPanel Margin="15">
                     <!-- Connection Panel -->
                     <Border Style="{StaticResource ModernPanelStyle}" 
