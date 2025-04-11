@@ -38,6 +38,10 @@ namespace Project
         private bool isPanelExpanded = true;
         private readonly double PANEL_WIDTH = 300;
 
+        // Add these fields with other state variables
+        private double currentScanArea = 360.0;
+        private const double MIN_SCAN_AREA = 30.0;
+
         // Görsel elemanlar için
         private Ellipse planeMarker;
         private Line directionLine;
@@ -448,7 +452,7 @@ namespace Project
                 {
                     antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
                     antennaController.UpdateDirectionalAntenna(directionalAntenna, airplane);
-                    UpdateAntennaPositions(); // Bu satırı ekledik
+                    UpdateAntennaPositions();
                 });
 
                 await Dispatcher.InvokeAsync(() =>
@@ -490,13 +494,43 @@ namespace Project
 
         private void UpdateAntennaPositions()
         {
-            // Get next scanning position from PSO
-            double nextAngle = pso.GetNextAngle(scanningAntenna.SignalStrength);
-            scanningAntenna.HorizontalAngle = angleFilter.Update(nextAngle);
+            if (airplane == null) return;
+
+            // Calculate target angles
+            double targetH = CalculateTargetHorizontalAngle(scanningAntenna, airplane);
+            double targetV = CalculateTargetVerticalAngle(scanningAntenna, airplane);
+
+            // Get next scanning position from PSO with all required parameters
+            var (nextH, nextV) = pso.GetNextPosition(
+                currentFitness: scanningAntenna.SignalStrength,
+                searchRadius: currentScanArea / 2,
+                targetH: targetH,
+                targetV: targetV
+            );
+
+            // Update antenna angles with Kalman filtering
+            scanningAntenna.HorizontalAngle = angleFilter.Update(nextH);
+            scanningAntenna.VerticalAngle = angleFilter.Update(nextV);
 
             // Update signal strength with Kalman filter
             double rawSignal = CalculateSignalStrength(scanningAntenna.HorizontalAngle);
             scanningAntenna.SignalStrength = signalFilter.Update(rawSignal);
+        }
+
+        private double CalculateTargetHorizontalAngle(AntennaState antenna, AirplaneState airplane)
+        {
+            double dX = (airplane.Longitude - antenna.Longitude) * Math.Cos(antenna.Latitude * Math.PI / 180.0);
+            double dY = airplane.Latitude - antenna.Latitude;
+            return (Math.Atan2(dX, dY) * 180.0 / Math.PI + 360.0) % 360.0;
+        }
+
+        private double CalculateTargetVerticalAngle(AntennaState antenna, AirplaneState airplane)
+        {
+            double distance = Math.Sqrt(
+                Math.Pow((airplane.Latitude - antenna.Latitude) * 111000, 2) +
+                Math.Pow((airplane.Longitude - antenna.Longitude) * 111000 * Math.Cos(antenna.Latitude * Math.PI / 180), 2)
+            );
+            return Math.Atan2(airplane.Altitude, distance) * 180.0 / Math.PI;
         }
 
         private double CalculateSignalStrength(double angle)

@@ -30,18 +30,24 @@
         {
             this.dt = dt;
 
-            // Initialize matrices
+            // Servo hareketleri için optimize edilmiş matrisler
             F = new double[,] { { 1, dt }, { 0, 1 } };
             H = new double[,] { { 1, 0 } };
-            P = new double[,] { { 1, 0 }, { 0, 1 } };
+
+            // Başlangıç kovaryans matrisi - daha yüksek başlangıç belirsizliği
+            P = new double[,] { { 10, 0 }, { 0, 10 } };
+
+            // Process noise - servo hareketi için optimize edildi
             Q = new double[,] {
-                { dt * dt * 0.25, dt * 0.5 },
-                { dt * 0.5, 1.0 }
+                { dt * dt * 0.1, dt * 0.2 },
+                { dt * 0.2, 0.5 }
             };
-            R = measurementNoise;
+
+            // Measurement noise - sensör gürültüsü için optimize edildi
+            R = measurementNoise * 2;
+
             I = new double[,] { { 1, 0 }, { 0, 1 } };
 
-            // Scale Q by process noise
             Q = MatrixScale(Q, processNoise);
         }
 
