@@ -78,63 +78,79 @@ namespace Project.Services
         {
             UpdateGlobalBest(currentFitness);
 
-            // Dynamic search area adjustment
-            double spreadH = Math.Min(searchRadius, 180.0);
-            double spreadV = Math.Min(searchRadius / 2, 45.0);
+            // Dynamic inertia weight based on signal quality
+            currentInertia = INERTIA_START - ((INERTIA_START - INERTIA_END) * (currentFitness / 100.0));
 
-            // Adjust inertia based on signal quality
-            currentInertia = currentFitness > 70 ?
-                INERTIA_END :
-                INERTIA_START - (currentFitness / 100.0) * (INERTIA_START - INERTIA_END);
+            // Adjust velocity limits based on search radius
+            MAX_VELOCITY_H = Math.Min(30.0, searchRadius * 0.2);
+            MAX_VELOCITY_V = Math.Min(15.0, searchRadius * 0.1);
+
+            // Move targetWeight out of foreach loop
+            double targetWeight = Math.Min(0.7, currentFitness / 100.0); // Max 70% influence
+            double psoWeight = 1.0 - targetWeight;
 
             foreach (var particle in particles)
             {
-                // Update personal best
-                if (currentFitness > particle.BestFitness)
-                {
-                    particle.BestFitness = currentFitness;
-                    particle.BestHorizontalPosition = particle.HorizontalPosition;
-                    particle.BestVerticalPosition = particle.VerticalPosition;
-                }
+                // Calculate PSO velocities
+                UpdateParticleVelocityWithTarget(particle, targetH, targetV, searchRadius);
 
-                UpdateParticleVelocityWithTarget(particle, targetH, targetV, spreadH, spreadV);
+                // Mix with direct target tracking
+                particle.HorizontalVelocity =
+                    (particle.HorizontalVelocity * psoWeight) +
+                    (GetAngleDifference(particle.HorizontalPosition, targetH) * targetWeight);
+
+                particle.VerticalVelocity =
+                    (particle.VerticalVelocity * psoWeight) +
+                    ((targetV - particle.VerticalPosition) * targetWeight);
+
+                // Update positions with improved boundary handling
                 UpdateParticlePosition(particle, searchRadius);
             }
 
-            // Concentrate particles when signal is strong
-            if (currentFitness > 70)
-            {
-                ConcentrateParticles(targetH, targetV, spreadH * 0.3, spreadV * 0.3);
-            }
+            // Return weighted average of best position and target 
+            double weightedH = (bestHorizontalAngle * (1 - targetWeight)) + (targetH * targetWeight);
+            double weightedV = (bestVerticalAngle * (1 - targetWeight)) + (targetV * targetWeight);
 
-            return (bestHorizontalAngle, bestVerticalAngle);
+            return ((weightedH + 360.0) % 360.0, Math.Max(0, Math.Min(90, weightedV)));
         }
 
         private void UpdateParticleVelocityWithTarget(
             Particle2D particle,
             double targetH,
             double targetV,
-            double spreadH,
-            double spreadV)
+            double searchRadius)
         {
             double r1 = random.NextDouble();
             double r2 = random.NextDouble();
             double r3 = random.NextDouble();
 
-            // Hedef konuma doğru bileşen ekle
+            // Açı farklarını hesapla
+            double personalBestDiffH = GetAngleDifference(particle.HorizontalPosition, particle.BestHorizontalPosition);
+            double globalBestDiffH = GetAngleDifference(particle.HorizontalPosition, bestHorizontalAngle);
+            double targetDiffH = GetAngleDifference(particle.HorizontalPosition, targetH);
+
+            // Geliştirilmiş hız güncellemesi
             particle.HorizontalVelocity = currentInertia * particle.HorizontalVelocity +
-                COGNITIVE * r1 * (particle.BestHorizontalPosition - particle.HorizontalPosition) +
-                SOCIAL * r2 * (bestHorizontalAngle - particle.HorizontalPosition) +
-                SOCIAL * r3 * (targetH - particle.HorizontalPosition);
+                COGNITIVE * r1 * personalBestDiffH +
+                SOCIAL * r2 * globalBestDiffH +
+                SOCIAL * 1.5 * r3 * targetDiffH; // Hedef yönüne daha fazla ağırlık
 
             particle.VerticalVelocity = currentInertia * particle.VerticalVelocity +
                 COGNITIVE * r1 * (particle.BestVerticalPosition - particle.VerticalPosition) +
                 SOCIAL * r2 * (bestVerticalAngle - particle.VerticalPosition) +
-                SOCIAL * r3 * (targetV - particle.VerticalPosition);
+                SOCIAL * 1.5 * r3 * (targetV - particle.VerticalPosition); // Hedef yüksekliğe daha fazla ağırlık
 
-            // Hız sınırlaması
-            particle.HorizontalVelocity = Math.Max(-spreadH, Math.Min(spreadH, particle.HorizontalVelocity));
-            particle.VerticalVelocity = Math.Max(-spreadV, Math.Min(spreadV, particle.VerticalVelocity));
+            // Dinamik hız sınırlaması
+            particle.HorizontalVelocity = Math.Max(-MAX_VELOCITY_H,
+                Math.Min(MAX_VELOCITY_H, particle.HorizontalVelocity));
+            particle.VerticalVelocity = Math.Max(-MAX_VELOCITY_V,
+                Math.Min(MAX_VELOCITY_V, particle.VerticalVelocity));
+        }
+
+        private double GetAngleDifference(double angle1, double angle2)
+        {
+            double diff = ((angle2 - angle1 + 540) % 360) - 180;
+            return diff;
         }
 
         public void IncreaseSearchArea()
