@@ -32,6 +32,7 @@ namespace Project
         private DispatcherTimer updateTimer;
         private DispatcherTimer hudUpdateTimer;
         private PointLatLng baseStationPosition;
+        private PointLatLng antennaPosition = new PointLatLng(40.7872, 26.6068);
         private bool isDragging = false;
         private Point dragStart;
         private bool isPanelExpanded = true;
@@ -53,6 +54,11 @@ namespace Project
         private double currentBattery = 100;
         private double currentThrottle;
 
+        private Button centerMapButton;
+        private Line antennaDirectionLine;
+        private Ellipse antennaMarker;
+        private Ellipse aircraftMarker;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -62,14 +68,21 @@ namespace Project
             antennaController = new AntennaController();
             signalFilter = new KalmanFilter();
             angleFilter = new KalmanFilter();
-            pso = new ParticleSwarmOptimizer(); // PSO'yu başlat
+            pso = new ParticleSwarmOptimizer();
 
             InitializeMap();
+            InitializeVisuals();
             InitializeComponents();
             SetupEventHandlers();
-            InitializeVisuals();
             InitializeTimer();
             InitializeHUD();
+
+            // Ortalama butonunu en son ve bir kere bağla
+            if (centerMapButton != null)
+            {
+                centerMapButton.Click -= CenterMapButton_Click; // Varsa önceki bağlantıyı kaldır
+                centerMapButton.Click += CenterMapButton_Click; // Yeni bağlantı ekle
+            }
         }
 
         private void InitializeComponents()
@@ -88,6 +101,7 @@ namespace Project
 
         private void SetupEventHandlers()
         {
+            // Remove centerMapButton.Click registration from here since it's handled in MainWindow constructor
             ConnectButton.Click += ConnectButton_Click;
             StartButton.Click += StartButton_Click;
             ResetButton.Click += ResetButton_Click;
@@ -124,90 +138,193 @@ namespace Project
             var figure = new PathFigure();
             figure.StartPoint = new Point(0, 0);
 
-            // Sweep için yay segmenti
+            // Sweep için yay segmenti - tarama açısını temsil eden daha geniş bir yay
             var arcSegment = new ArcSegment(
                 new Point(150, 0),
                 new Size(150, 150),
-                45, // Sweep angle
-                false, // IsLargeArc
+                60, // Daha geniş sweep angle
+                false,
                 SweepDirection.Clockwise,
-                true); // IsStroked
+                true);
 
             figure.Segments.Add(new LineSegment(new Point(150, 0), true));
             figure.Segments.Add(arcSegment);
             geometry.Figures.Add(figure);
 
-            if (RadarSweep != null)
+            // Tarama anteni (mavi)
+            Line scanningLine = new Line
             {
-                RadarSweep.Data = geometry;
-
-                // Transform group oluştur
-                var transformGroup = new TransformGroup();
-                sweepRotation = new RotateTransform();
-                sweepPosition = new TranslateTransform();
-
-                transformGroup.Children.Add(sweepRotation);
-                transformGroup.Children.Add(sweepPosition);
-
-                RadarSweep.RenderTransform = transformGroup;
-            }
-
-            // Uçak marker'ı
-            planeMarker = new Ellipse
-            {
-                Width = 10,
-                Height = 10,
-                Fill = Brushes.Red
+                Stroke = Brushes.Blue,
+                StrokeThickness = 2,
+                StrokeDashArray = new DoubleCollection { 2, 2 }
             };
-            MapCanvas.Children.Add(planeMarker);
 
-            // Yön çizgisi
-            directionLine = new Line
+            // Yönlenme anteni (yeşil)
+            Line directionalLine = new Line
             {
                 Stroke = Brushes.Green,
                 StrokeThickness = 2
             };
-            MapCanvas.Children.Add(directionLine);
+
+            MapCanvas.Children.Add(scanningLine);
+            MapCanvas.Children.Add(directionalLine);
+
+            // Anten gösterge açıklamaları - küçültülmüş hali
+            var legendBorder = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0)),
+                Margin = new Thickness(5),
+                Padding = new Thickness(3),
+                CornerRadius = new CornerRadius(3)
+            };
+
+            var legend = new StackPanel
+            {
+                Orientation = Orientation.Horizontal
+            };
+
+            legend.Children.Add(new Rectangle { Width = 15, Height = 2, Fill = Brushes.Blue, Margin = new Thickness(2) });
+            legend.Children.Add(new TextBlock { Text = "Scan", Foreground = Brushes.White, Margin = new Thickness(2), FontSize = 10 });
+            legend.Children.Add(new Rectangle { Width = 15, Height = 2, Fill = Brushes.Green, Margin = new Thickness(8, 2, 2, 2) });
+            legend.Children.Add(new TextBlock { Text = "Track", Foreground = Brushes.White, Margin = new Thickness(2), FontSize = 10 });
+
+            legendBorder.Child = legend;
+            Canvas.SetLeft(legendBorder, 5);
+            Canvas.SetBottom(legendBorder, 5);
+            MapCanvas.Children.Add(legendBorder);
+
+            // Anten marker'ı
+            antennaMarker = new Ellipse
+            {
+                Width = 10,
+                Height = 10,
+                Fill = Brushes.Yellow,
+                Stroke = Brushes.Orange,
+                StrokeThickness = 2
+            };
+
+            // Uçak marker'ı
+            aircraftMarker = new Ellipse
+            {
+                Width = 12,
+                Height = 12,
+                Fill = Brushes.Red,
+                Stroke = Brushes.White,
+                StrokeThickness = 2
+            };
+
+            // Anten yön çizgisi
+            antennaDirectionLine = new Line
+            {
+                Stroke = new SolidColorBrush(Color.FromArgb(180, 255, 165, 0)),
+                StrokeThickness = 2,
+                StrokeDashArray = new DoubleCollection { 4, 2 }
+            };
+
+            RadarElementsCanvas.Children.Add(antennaDirectionLine);
+            RadarElementsCanvas.Children.Add(antennaMarker);
+            RadarElementsCanvas.Children.Add(aircraftMarker);
+        }
+
+        private void CenterMapButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (airplane == null) return;
+
+            try
+            {
+                // Anten ve uçak arasındaki orta noktayı hesapla
+                double centerLat = (antennaPosition.Lat + airplane.Latitude) / 2;
+                double centerLng = (antennaPosition.Lng + airplane.Longitude) / 2;
+
+                // Mesafeyi hesapla
+                double latDiff = Math.Abs(antennaPosition.Lat - airplane.Latitude);
+                double lngDiff = Math.Abs(antennaPosition.Lng - airplane.Longitude);
+                double maxDiff = Math.Max(latDiff, lngDiff) * 2;
+
+                // Zoom seviyesini ayarla
+                int zoomLevel = 15;
+                if (maxDiff > 0.01) zoomLevel = 14;
+                if (maxDiff > 0.02) zoomLevel = 13;
+                if (maxDiff > 0.05) zoomLevel = 12;
+                if (maxDiff > 0.1) zoomLevel = 11;
+
+                // Merkez ve zoom'u ayarla
+                MapControl.Position = new PointLatLng(centerLat, centerLng);
+                MapControl.Zoom = zoomLevel;
+
+                // Radar pozisyonunu güncelle
+                UpdateRadarPosition();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Center map error: {ex.Message}");
+            }
         }
 
         private void UpdateMap()
         {
-            if (airplane == null || planeMarker == null || directionLine == null || MapCanvas == null)
-                return;
-
             try
             {
-                // Only center map every 5 seconds and if scanning
-                bool shouldCenterMap = (DateTime.Now - lastMapCenterUpdate).TotalMilliseconds >= MAP_CENTER_INTERVAL
-                                      && isScanning;
+                // Antenna position - sabit koordinat
+                GPoint antennaPoint = MapControl.FromLatLngToLocal(antennaPosition);
 
-                if (shouldCenterMap)
+                // Radar elemanlarını antenin etrafına yerleştir
+                if (RadarBackground != null)
                 {
-                    // Keşan Havalimanı merkezli görünüm
-                    MapControl.Position = baseStationPosition;
-                    lastMapCenterUpdate = DateTime.Now;
+                    Canvas.SetLeft(RadarBackground, antennaPoint.X - RadarBackground.Width / 2);
+                    Canvas.SetTop(RadarBackground, antennaPoint.Y - RadarBackground.Height / 2);
                 }
 
-                // Update visual elements
-                GPoint gpoint = MapControl.FromLatLngToLocal(new PointLatLng(airplane.Latitude, airplane.Longitude));
-                System.Windows.Point screenPoint = new System.Windows.Point(gpoint.X, gpoint.Y);
-
-                // Update airplane marker position
-                Canvas.SetLeft(planeMarker, screenPoint.X - planeMarker.Width / 2);
-                Canvas.SetTop(planeMarker, screenPoint.Y - planeMarker.Height / 2);
-
-                // Update direction line
-                double length = 50;
-                double angleRad = airplane.Heading * Math.PI / 180;
-                directionLine.X1 = screenPoint.X;
-                directionLine.Y1 = screenPoint.Y;
-                directionLine.X2 = screenPoint.X + length * Math.Cos(angleRad);
-                directionLine.Y2 = screenPoint.X + length * Math.Sin(angleRad);
-
-                if (sweepPosition != null)
+                if (RadarGrid != null)
                 {
-                    sweepPosition.X = screenPoint.X;
-                    sweepPosition.Y = screenPoint.Y;
+                    Canvas.SetLeft(RadarGrid, antennaPoint.X - 100);
+                    Canvas.SetTop(RadarGrid, antennaPoint.Y - 100);
+                }
+
+                // Anten marker pozisyonu
+                Canvas.SetLeft(antennaMarker, antennaPoint.X - antennaMarker.Width / 2);
+                Canvas.SetTop(antennaMarker, antennaPoint.Y - antennaMarker.Height / 2);
+
+                // Uçak pozisyonunu güncelle
+                if (airplane != null)
+                {
+                    GPoint planePoint = MapControl.FromLatLngToLocal(new PointLatLng(airplane.Latitude, airplane.Longitude));
+                    Canvas.SetLeft(aircraftMarker, planePoint.X - aircraftMarker.Width / 2);
+                    Canvas.SetTop(aircraftMarker, planePoint.Y - aircraftMarker.Height / 2);
+
+                    // Anten-uçak arası çizgi
+                    antennaDirectionLine.X1 = antennaPoint.X;
+                    antennaDirectionLine.Y1 = antennaPoint.Y;
+                    antennaDirectionLine.X2 = planePoint.X;
+                    antennaDirectionLine.Y2 = planePoint.Y;
+                }
+
+                // Tarama anteni çizgisi
+                Line scanningLine = MapCanvas.Children.OfType<Line>().FirstOrDefault(l => l.Stroke == Brushes.Blue);
+                if (scanningLine != null && scanningAntenna != null)
+                {
+                    double scanAngleRad = scanningAntenna.HorizontalAngle * Math.PI / 180;
+                    double length = 150 * (scanningAntenna.SignalStrength / 100.0);
+
+                    scanningLine.X1 = antennaPoint.X;
+                    scanningLine.Y1 = antennaPoint.Y;
+                    scanningLine.X2 = antennaPoint.X + length * Math.Cos(scanAngleRad);
+                    scanningLine.Y2 = antennaPoint.Y + length * Math.Sin(scanAngleRad);
+                    scanningLine.StrokeThickness = 2;
+                }
+
+                // Yönlenme anteni çizgisi
+                Line directionalLine = MapCanvas.Children.OfType<Line>().FirstOrDefault(l => l.Stroke == Brushes.Green);
+                if (directionalLine != null && directionalAntenna != null)
+                {
+                    double dirAngleRad = directionalAntenna.HorizontalAngle * Math.PI / 180;
+                    double length = 150 * (directionalAntenna.SignalStrength / 100.0);
+
+                    directionalLine.X1 = antennaPoint.X;
+                    directionalLine.Y1 = antennaPoint.Y;
+                    directionalLine.X2 = antennaPoint.X + length * Math.Cos(dirAngleRad);
+                    directionalLine.Y2 = antennaPoint.Y + length * Math.Sin(dirAngleRad);
+                    directionalLine.StrokeThickness = 2;
                 }
             }
             catch (Exception ex)
@@ -458,7 +575,7 @@ namespace Project
 
                 // Keşan Havalimanı koordinatları
                 baseStationPosition = new PointLatLng(40.737222, 26.571667);
-                MapControl.Position = baseStationPosition;
+                MapControl.Position = antennaPosition;
 
                 // Uydu görüntüsü için daha yakın zoom
                 MapControl.MinZoom = 2;
@@ -471,13 +588,48 @@ namespace Project
                 MapControl.DragButton = MouseButton.Left;
                 MapControl.MouseWheelZoomEnabled = true;
                 MapControl.MouseWheelZoomType = MouseWheelZoomType.MousePositionAndCenter;
+                MapControl.IsHitTestVisible = true;
 
-                // Performans ayarları
-                MapControl.RetryLoadTile = 0;
-                MapControl.ShowTileGridLines = false;
+                // Z-Index ayarları
+                Panel.SetZIndex(MapControl, 0);
+                Panel.SetZIndex(RadarElementsCanvas, 1);
+                Panel.SetZIndex(ControlsCanvas, 2);
 
-                // Önemli: Panel'in üstte kalmasını sağla
-                Panel.SetZIndex(MapCanvas, 1);
+                // Canvas ayarları
+                MapCanvas.Background = null;
+                MapCanvas.IsHitTestVisible = true;
+
+                RadarElementsCanvas.Background = null;
+                RadarElementsCanvas.IsHitTestVisible = false;
+
+                ControlsCanvas.Background = null;
+                ControlsCanvas.IsHitTestVisible = true;
+
+                // Ortalama butonu için özel ayar
+                if (centerMapButton != null)
+                {
+                    centerMapButton.IsHitTestVisible = true;
+                    Panel.SetZIndex(centerMapButton, 1000);
+                }
+
+                // Event handlers for map drag
+                MapControl.MouseDown += (s, e) =>
+                {
+                    if (e.ChangedButton == MouseButton.Left)
+                    {
+                        MapControl.CaptureMouse();
+                        e.Handled = true;
+                    }
+                };
+
+                MapControl.MouseUp += (s, e) =>
+                {
+                    if (e.ChangedButton == MouseButton.Left)
+                    {
+                        MapControl.ReleaseMouseCapture();
+                        e.Handled = true;
+                    }
+                };
 
                 UpdateRadarPosition();
             }
@@ -489,30 +641,30 @@ namespace Project
 
         private async Task UpdateRadarPosition()
         {
-            if (MapControl == null || airplane == null) return;
+            if (MapControl == null) return;
 
             try
             {
-                // Uçak pozisyonunu al
-                GPoint planePoint = MapControl.FromLatLngToLocal(new PointLatLng(airplane.Latitude, airplane.Longitude));
+                // Get antenna position - always center radar on antenna
+                GPoint antennaPoint = MapControl.FromLatLngToLocal(antennaPosition);
 
-                // Radar elemanlarını uçak pozisyonuna göre konumlandır
+                // Position radar elements around antenna
                 if (RadarBackground != null)
                 {
-                    Canvas.SetLeft(RadarBackground, planePoint.X - RadarBackground.Width / 2);
-                    Canvas.SetTop(RadarBackground, planePoint.Y - RadarBackground.Height / 2);
+                    Canvas.SetLeft(RadarBackground, antennaPoint.X - RadarBackground.Width / 2);
+                    Canvas.SetTop(RadarBackground, antennaPoint.Y - RadarBackground.Height / 2);
                 }
 
                 if (RadarGrid != null)
                 {
-                    Canvas.SetLeft(RadarGrid, planePoint.X - 100); // Grid merkezi için
-                    Canvas.SetTop(RadarGrid, planePoint.Y - 100);
+                    Canvas.SetLeft(RadarGrid, antennaPoint.X - 100);
+                    Canvas.SetTop(RadarGrid, antennaPoint.Y - 100);
                 }
 
                 if (RadarSweep != null)
                 {
-                    Canvas.SetLeft(RadarSweep, planePoint.X - 50); // Sweep merkezi için
-                    Canvas.SetTop(RadarSweep, planePoint.Y - 50);
+                    Canvas.SetLeft(RadarSweep, antennaPoint.X - 50);
+                    Canvas.SetTop(RadarSweep, antennaPoint.Y - 50);
                 }
             }
             catch (Exception ex)
@@ -543,6 +695,9 @@ namespace Project
         {
             if (e.ChangedButton == MouseButton.Left && e.ButtonState == MouseButtonState.Pressed)
             {
+                // Tıklanan noktanın buton üzerinde olup olmadığını kontrol et
+                if (e.Source is Button) return;
+
                 isDragging = true;
                 dragStart = e.GetPosition(MapControl);
                 try
