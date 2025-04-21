@@ -452,6 +452,7 @@ namespace Project
                 {
                     antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
                     antennaController.UpdateDirectionalAntenna(directionalAntenna, airplane);
+                    UpdateAntennaPositions();
                 });
 
                 await Dispatcher.InvokeAsync(() =>
@@ -491,43 +492,43 @@ namespace Project
             }
         }
 
-        private void UpdateAntennaDisplay()
-        {
-            Dispatcher.Invoke(() =>
-            {
-                try
-                {
-                    // Antenna angles
-                    if (scanningAntenna != null)
-                    {
-                        ScanHAngle.Text = $"{scanningAntenna.HorizontalAngle:F1}°";
-                        ScanVAngle.Text = $"{scanningAntenna.VerticalAngle:F1}°";
-                        SignalStrength.Text = $"{scanningAntenna.SignalStrength:F1}%";
-                        ScanSignalBar.Value = scanningAntenna.SignalStrength;
-                    }
 
-                    if (directionalAntenna != null)
-                    {
-                        DirHAngle.Text = $"{directionalAntenna.HorizontalAngle:F1}°";
-                        DirVAngle.Text = $"{directionalAntenna.VerticalAngle:F1}°";
-                        DirSignalBar.Value = directionalAntenna.SignalStrength;
-                        DirSignalText.Text = $"{directionalAntenna.SignalStrength:F1}%";
-                    }
 
-                    // Update radar visualization
-                    UpdateRadarDisplay();
 
-                    // Update status message
-                    StatusMessage.Text = isScanning ?
-                        $"Scanning: {scanningAntenna?.SignalStrength:F1}% Signal" :
-                        "Ready";
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"UpdateAntennaDisplay error: {ex.Message}");
-                }
-            });
-        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         private void UpdateAntennaPositions()
         {
@@ -591,6 +592,44 @@ namespace Project
             // Toplam sinyal gücü (0-100 arası)
             return Math.Max(0, Math.Min(100,
                 (angleAttenuation * 70 + distanceAttenuation * 30))); // Açı daha önemli
+        }
+
+        private void UpdateAntennaDisplay()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    // Antenna angles
+                    if (scanningAntenna != null)
+                    {
+                        ScanHAngle.Text = $"{scanningAntenna.HorizontalAngle:F1}°";
+                        ScanVAngle.Text = $"{scanningAntenna.VerticalAngle:F1}°";
+                        SignalStrength.Text = $"{scanningAntenna.SignalStrength:F1}%";
+                        ScanSignalBar.Value = scanningAntenna.SignalStrength;
+                    }
+
+                    if (directionalAntenna != null)
+                    {
+                        DirHAngle.Text = $"{directionalAntenna.HorizontalAngle:F1}°";
+                        DirVAngle.Text = $"{directionalAntenna.VerticalAngle:F1}°";
+                        DirSignalBar.Value = directionalAntenna.SignalStrength;
+                        DirSignalText.Text = $"{directionalAntenna.SignalStrength:F1}%";
+                    }
+
+                    // Update radar visualization
+                    UpdateRadarDisplay();
+
+                    // Update status message
+                    StatusMessage.Text = isScanning ?
+                        $"Scanning: {scanningAntenna?.SignalStrength:F1}% Signal" :
+                        "Ready";
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"UpdateAntennaDisplay error: {ex.Message}");
+                }
+            });
         }
 
         private void InitializeMap()
