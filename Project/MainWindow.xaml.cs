@@ -63,6 +63,13 @@ namespace Project
         private Ellipse antennaMarker;
         private Ellipse aircraftMarker;
 
+        // Yönlenme anteni güncelleme için zamanlayıcı
+        private DateTime lastDirectionalUpdate = DateTime.MinValue;
+        private const int DIRECTIONAL_UPDATE_PERIOD_MS = 2000; // 2 saniyede bir yönlenme anteni güncellensin
+
+        // Tarama anteninin bulduğu en iyi sinyal
+        private double lastBestScanSignal = 0;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -303,12 +310,13 @@ namespace Project
                     antennaDirectionLine.Y2 = planePoint.Y;
                 }
 
-                // Tarama anteni çizgisi
+                // Tarama anteni çizgisi (mavi) - PSO ile güncellenen açı
                 Line scanningLine = MapCanvas.Children.OfType<Line>().FirstOrDefault(l => l.Stroke == Brushes.Blue);
                 if (scanningLine != null && scanningAntenna != null)
                 {
                     double scanAngleRad = scanningAntenna.HorizontalAngle * Math.PI / 180;
-                    double length = 150 * (scanningAntenna.SignalStrength / 100.0);
+                    double scanV = scanningAntenna.VerticalAngle;
+                    double length = 120 + 30 * (scanV / 90.0); // Dikey açıya göre uzunluk
 
                     scanningLine.X1 = antennaPoint.X;
                     scanningLine.Y1 = antennaPoint.Y;
@@ -317,12 +325,13 @@ namespace Project
                     scanningLine.StrokeThickness = 2;
                 }
 
-                // Yönlenme anteni çizgisi
+                // Yönlenme anteni çizgisi (yeşil)
                 Line directionalLine = MapCanvas.Children.OfType<Line>().FirstOrDefault(l => l.Stroke == Brushes.Green);
                 if (directionalLine != null && directionalAntenna != null)
                 {
                     double dirAngleRad = directionalAntenna.HorizontalAngle * Math.PI / 180;
-                    double length = 150 * (directionalAntenna.SignalStrength / 100.0);
+                    double dirV = directionalAntenna.VerticalAngle;
+                    double length = 120 + 30 * (dirV / 90.0);
 
                     directionalLine.X1 = antennaPoint.X;
                     directionalLine.Y1 = antennaPoint.Y;
@@ -448,12 +457,19 @@ namespace Project
 
             try
             {
-                await Task.Run(() =>
-                {
-                    antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
-                    antennaController.UpdateDirectionalAntenna(directionalAntenna, airplane);
-                    UpdateAntennaPositions();
-                });
+                // Antenlerin konumunu güncelle
+                scanningAntenna.Latitude = antennaPosition.Lat;
+                scanningAntenna.Longitude = antennaPosition.Lng;
+                scanningAntenna.Altitude = 0;
+                directionalAntenna.Latitude = antennaPosition.Lat;
+                directionalAntenna.Longitude = antennaPosition.Lng;
+                directionalAntenna.Altitude = 0;
+
+                // Tarama anteni güncellemesi
+                antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
+
+                // Yönlenme anteni güncellemesi - scanningAntenna parametresini ekledik
+                antennaController.UpdateDirectionalAntenna(directionalAntenna, scanningAntenna, airplane);
 
                 await Dispatcher.InvokeAsync(() =>
                 {
@@ -492,106 +508,19 @@ namespace Project
             }
         }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         private void UpdateAntennaPositions()
         {
             if (airplane == null) return;
 
-            // Calculate target angles
-            double targetH = CalculateTargetHorizontalAngle(scanningAntenna, airplane);
-            double targetV = CalculateTargetVerticalAngle(scanningAntenna, airplane);
+            scanningAntenna.Latitude = antennaPosition.Lat;
+            scanningAntenna.Longitude = antennaPosition.Lng;
+            scanningAntenna.Altitude = 0;
+            directionalAntenna.Latitude = antennaPosition.Lat;
+            directionalAntenna.Longitude = antennaPosition.Lng;
+            directionalAntenna.Altitude = 0;
 
-            // Get next scanning position from PSO with all required parameters
-            var (nextH, nextV) = pso.GetNextPosition(
-                currentFitness: scanningAntenna.SignalStrength,
-                searchRadius: currentScanArea / 2,
-                targetH: targetH,
-                targetV: targetV
-            );
-
-            // Update antenna angles with Kalman filtering
-            scanningAntenna.HorizontalAngle = angleFilter.Update(nextH);
-            scanningAntenna.VerticalAngle = angleFilter.Update(nextV);
-
-            // Update signal strength with Kalman filter
-            double rawSignal = CalculateSignalStrength(scanningAntenna.HorizontalAngle);
-            scanningAntenna.SignalStrength = signalFilter.Update(rawSignal);
-        }
-
-        private double CalculateTargetHorizontalAngle(AntennaState antenna, AirplaneState airplane)
-        {
-            double dX = (airplane.Longitude - antenna.Longitude) * Math.Cos(antenna.Latitude * Math.PI / 180.0);
-            double dY = airplane.Latitude - antenna.Latitude;
-            return (Math.Atan2(dX, dY) * 180.0 / Math.PI + 360.0) % 360.0;
-        }
-
-        private double CalculateTargetVerticalAngle(AntennaState antenna, AirplaneState airplane)
-        {
-            double distance = Math.Sqrt(
-                Math.Pow((airplane.Latitude - antenna.Latitude) * 111000, 2) +
-                Math.Pow((airplane.Longitude - antenna.Longitude) * 111000 * Math.Cos(antenna.Latitude * Math.PI / 180), 2)
-            );
-            return Math.Atan2(airplane.Altitude, distance) * 180.0 / Math.PI;
-        }
-
-        private double CalculateSignalStrength(double angle)
-        {
-            if (airplane == null) return 0;
-
-            // Açı farkını hesapla
-            double angleDiff = Math.Abs(angle - airplane.Heading);
-            angleDiff = Math.Min(angleDiff, 360 - angleDiff); // En kısa açı farkını al
-
-            // Mesafe bazlı zayıflama
-            double distance = Math.Sqrt(
-                Math.Pow(airplane.Latitude - baseStationPosition.Lat, 2) +
-                Math.Pow(airplane.Longitude - baseStationPosition.Lng, 2)
-            );
-
-            // Açı ve mesafe bazlı sinyal gücü hesaplama
-            double angleAttenuation = Math.Max(0, 1.0 - (angleDiff / 180.0));
-            double distanceAttenuation = Math.Max(0, 1.0 - (distance * 0.1)); // Mesafe faktörü
-
-            // Toplam sinyal gücü (0-100 arası)
-            return Math.Max(0, Math.Min(100,
-                (angleAttenuation * 70 + distanceAttenuation * 30))); // Açı daha önemli
+            antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
+            antennaController.UpdateDirectionalAntenna(directionalAntenna, scanningAntenna, airplane);
         }
 
         private void UpdateAntennaDisplay()
@@ -600,30 +529,33 @@ namespace Project
             {
                 try
                 {
-                    // Antenna angles
+                    // Tarama anteni
                     if (scanningAntenna != null)
                     {
                         ScanHAngle.Text = $"{scanningAntenna.HorizontalAngle:F1}°";
                         ScanVAngle.Text = $"{scanningAntenna.VerticalAngle:F1}°";
-                        SignalStrength.Text = $"{scanningAntenna.SignalStrength:F1}%";
+                        SignalStrength.Text = $"RSSI: {scanningAntenna.RSSI:F1} dBm\nSNR: {scanningAntenna.SNR:F1} dB";
                         ScanSignalBar.Value = scanningAntenna.SignalStrength;
                     }
 
+                    // Yönlenme anteni
                     if (directionalAntenna != null)
                     {
                         DirHAngle.Text = $"{directionalAntenna.HorizontalAngle:F1}°";
                         DirVAngle.Text = $"{directionalAntenna.VerticalAngle:F1}°";
                         DirSignalBar.Value = directionalAntenna.SignalStrength;
-                        DirSignalText.Text = $"{directionalAntenna.SignalStrength:F1}%";
+                        DirSignalText.Text = $"RSSI: {directionalAntenna.RSSI:F1} dBm\nSNR: {directionalAntenna.SNR:F1} dB";
                     }
 
-                    // Update radar visualization
                     UpdateRadarDisplay();
 
-                    // Update status message
-                    StatusMessage.Text = isScanning ?
-                        $"Scanning: {scanningAntenna?.SignalStrength:F1}% Signal" :
+                    // Durum mesajları
+                    string status = isScanning ?
+                        (antennaController.IsInitialScan ? "Initial Scan" : "Fine Tracking") :
                         "Ready";
+
+                    SystemStatus.Text = $"{status} | Scan Area: {antennaController.CurrentScanArea:F1}°";
+                    StatusMessage.Text = $"Scanning: RSSI={scanningAntenna?.RSSI:F1}dBm | Tracking: RSSI={directionalAntenna?.RSSI:F1}dBm";
                 }
                 catch (Exception ex)
                 {
