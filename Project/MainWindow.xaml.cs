@@ -475,26 +475,29 @@ namespace Project
 
             try
             {
-                // Antenlerin konumunu güncelle
+                // Update scanning antenna position
                 scanningAntenna.Latitude = antennaPosition.Lat;
                 scanningAntenna.Longitude = antennaPosition.Lng;
                 scanningAntenna.Altitude = 0;
+
+                // Update directional antenna position
                 directionalAntenna.Latitude = antennaPosition.Lat;
                 directionalAntenna.Longitude = antennaPosition.Lng;
                 directionalAntenna.Altitude = 0;
 
-                // Tarama anteni güncellemesi
+                // Update scanning antenna using PSO
                 antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
 
-                // Yönlenme anteni güncellemesi - scanningAntenna parametresini ekledik
+                // Ensure directional antenna follows the best signal found by the scanning antenna
                 antennaController.UpdateDirectionalAntenna(directionalAntenna, scanningAntenna, airplane);
 
+                // Refresh UI elements
                 await Dispatcher.InvokeAsync(() =>
                 {
                     UpdateAntennaDisplay();
                     UpdateMap();
                     UpdateRadarPosition();
-                }, System.Windows.Threading.DispatcherPriority.Render);
+                }, DispatcherPriority.Render);
             }
             catch (Exception ex)
             {
@@ -547,16 +550,17 @@ namespace Project
             {
                 try
                 {
-                    // Tarama anteni
+                    // Scanning antenna
                     if (scanningAntenna != null)
                     {
                         ScanHAngle.Text = $"{scanningAntenna.HorizontalAngle:F1}°";
                         ScanVAngle.Text = $"{scanningAntenna.VerticalAngle:F1}°";
                         SignalStrength.Text = $"RSSI: {scanningAntenna.RSSI:F1} dBm\nSNR: {scanningAntenna.SNR:F1} dB";
                         ScanSignalBar.Value = scanningAntenna.SignalStrength;
+                        ScanAreaSize.Text = $"Scan Area: {antennaController.CurrentScanArea:F1}°";
                     }
 
-                    // Yönlenme anteni
+                    // Directional antenna
                     if (directionalAntenna != null)
                     {
                         DirHAngle.Text = $"{directionalAntenna.HorizontalAngle:F1}°";
@@ -565,9 +569,10 @@ namespace Project
                         DirSignalText.Text = $"RSSI: {directionalAntenna.RSSI:F1} dBm\nSNR: {directionalAntenna.SNR:F1} dB";
                     }
 
+                    // Update radar display
                     UpdateRadarDisplay();
 
-                    // Durum mesajları
+                    // Status messages
                     string status = isScanning ?
                         (antennaController.IsInitialScan ? "Initial Scan" : "Fine Tracking") :
                         "Ready";

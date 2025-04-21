@@ -12,95 +12,138 @@ namespace Project.Services
         private double bestVerticalAngle;
         private double bestFitness;
 
-        // Adjusted PSO parameters
+        // PSO parameters tuned for antenna tracking
         private const double INERTIA_START = 0.9;
-        private const double INERTIA_END = 0.2;   // Lower end inertia
-        private double currentInertia;
-        private const double COGNITIVE = 2.0;
-        private const double SOCIAL = 2.0;
-        private double MAX_VELOCITY_H = 20.0;  // Increased for faster response
-        private double MAX_VELOCITY_V = 10.0;  // Increased for faster response
-        private const double W_START = 0.9; // Başlangıç atalet ağırlığı
-        private const double W_END = 0.4;   // Bitiş atalet ağırlığı
-        private const double C1 = 2.0;      // Bilişsel bileşen
-        private const double C2 = 2.0;      // Sosyal bileşen
-        private double currentW;
-        private int iteration;
+        private const double INERTIA_END = 0.4;
+        private const double COGNITIVE = 2.0;  // Weight for particle's own best
+        private const double SOCIAL = 2.5;     // Weight for global best (increased for faster convergence)
         private const int MAX_ITERATIONS = 100;
 
-        // Signal strength thresholds
+        // Dynamic velocity limits
+        private double maxVelocityH = 20.0;
+        private double maxVelocityV = 10.0;
+
+        // Current state
+        private int iteration;
+        private double currentInertia;
+        private double prevBestFitness;
+        private int stagnationCount;
+        private const int STAGNATION_THRESHOLD = 5;
+
+        // Exploration vs exploitation balance
+        private double explorationFactor = 1.0;
+        private const double EXPLORATION_DECAY = 0.95;
+
+        // Signal strength thresholds for adaptive behavior
         private const double EXCELLENT_SIGNAL = 80.0;
         private const double GOOD_SIGNAL = 60.0;
-        private const double POOR_SIGNAL = 40.0;
-        private const double MIN_SIGNAL = 20.0;
+        private const double FAIR_SIGNAL = 40.0;
+        private const double POOR_SIGNAL = 20.0;
 
-        // Search area management
-        private const double MIN_SEARCH_AREA = 30.0;
-        private const double SEARCH_AREA_REDUCTION = 0.8;
-        private double currentSearchArea = 360.0;
-        private double searchCenterH = 180.0;
-        private double searchCenterV = 45.0;
-        private const double CONVERGENCE_THRESHOLD = 5.0;
+        // Tracking optimization
+        private double searchCenterH = 0.0;
+        private double searchCenterV = 0.0;
+        private List<(double h, double v, double fitness)> historicalBests = new List<(double, double, double)>();
+        private const int MAX_HISTORY = 10;
 
-        public ParticleSwarmOptimizer(int particleCount = 30)
+        public int ParticleCount => particles.Count;
+        public double BestFitness => bestFitness;
+
+        public ParticleSwarmOptimizer(int particleCount = 50)
         {
             particles = new List<Particle2D>();
             bestFitness = double.MinValue;
-            currentInertia = INERTIA_START;
-            currentW = W_START;
+            prevBestFitness = double.MinValue;
+            Reset();
             InitializeParticles(particleCount);
         }
 
         private void InitializeParticles(int count)
         {
             particles.Clear();
-            for (int i = 0; i < count; i++)
+
+            // Grid-based initialization for wide coverage
+            int gridPoints = (int)Math.Sqrt(count * 0.7); // Use 70% of particles for grid
+            double gridStepH = 360.0 / gridPoints;
+            double gridStepV = 90.0 / gridPoints;
+
+            int particleIndex = 0;
+
+            // Create grid-based particles with better distribution
+            for (int i = 0; i < gridPoints && particleIndex < count; i++)
             {
-                // Başlangıçta tüm alanı kapsayacak şekilde dağıt
+                for (int j = 0; j < gridPoints && particleIndex < count; j++)
+                {
+                    // Distribute particles across full 360-degree range
+                    double h = (i * gridStepH + random.NextDouble() * gridStepH) % 360.0;
+                    double v = Math.Min(90.0, j * gridStepV + random.NextDouble() * gridStepV);
+
+                    particles.Add(new Particle2D
+                    {
+                        HorizontalPosition = h,
+                        VerticalPosition = v,
+                        HorizontalVelocity = (random.NextDouble() - 0.5) * maxVelocityH * 0.5,
+                        VerticalVelocity = (random.NextDouble() - 0.5) * maxVelocityV * 0.5,
+                        BestHorizontalPosition = h,
+                        BestVerticalPosition = v,
+                        BestFitness = double.MinValue
+                    });
+
+                    particleIndex++;
+                }
+            }
+
+            // Fill remaining with uniform random distribution
+            while (particleIndex < count)
+            {
                 double h = random.NextDouble() * 360.0;
                 double v = random.NextDouble() * 90.0;
+
                 particles.Add(new Particle2D
                 {
                     HorizontalPosition = h,
                     VerticalPosition = v,
-                    HorizontalVelocity = (random.NextDouble() - 0.5) * 2 * MAX_VELOCITY_H,
-                    VerticalVelocity = (random.NextDouble() - 0.5) * 2 * MAX_VELOCITY_V,
+                    HorizontalVelocity = (random.NextDouble() - 0.5) * maxVelocityH,
+                    VerticalVelocity = (random.NextDouble() - 0.5) * maxVelocityV,
                     BestHorizontalPosition = h,
                     BestVerticalPosition = v,
                     BestFitness = double.MinValue
                 });
+
+                particleIndex++;
             }
         }
 
-        // PSO ile bir sonraki açıları döndür, particles listesini günceller
-        public (double h, double v) ScanStep(Func<double, double, double> fitnessFunc, double searchAreaH, double searchAreaV)
+        public (double h, double v) ScanStep(Func<double, double, double> fitnessFunc, double searchAreaH, double searchAreaV, double targetH, double targetV)
         {
             iteration++;
-            currentW = W_START - (W_START - W_END) * (iteration / (double)MAX_ITERATIONS);
 
-            // Grid-based systematic search pattern
-            if (iteration == 1)
+            // Update inertia weight
+            currentInertia = INERTIA_START - (INERTIA_START - INERTIA_END) * (iteration / (double)MAX_ITERATIONS);
+
+            // Adjust velocity limits based on search area
+            maxVelocityH = searchAreaH * 0.15;
+            maxVelocityV = searchAreaV * 0.15;
+
+            // Reset stagnation if improvement is observed
+            if (bestFitness > prevBestFitness + 1.0)
             {
-                double gridH = 360.0 / Math.Sqrt(particles.Count);
-                double gridV = 90.0 / Math.Sqrt(particles.Count);
-
-                int index = 0;
-                for (double h = 0; h < 360.0; h += gridH)
-                {
-                    for (double v = 0; v < 90.0; v += gridV)
-                    {
-                        if (index < particles.Count)
-                        {
-                            particles[index].HorizontalPosition = h;
-                            particles[index].VerticalPosition = v;
-                            particles[index].HorizontalVelocity = 0;
-                            particles[index].VerticalVelocity = 0;
-                            index++;
-                        }
-                    }
-                }
+                stagnationCount = 0;
+                prevBestFitness = bestFitness;
+            }
+            else
+            {
+                stagnationCount++;
             }
 
+            // Inject diversity if stagnation detected
+            if (stagnationCount > STAGNATION_THRESHOLD)
+            {
+                InjectDiversity(searchAreaH, searchAreaV, targetH, targetV);
+                stagnationCount = 0;
+            }
+
+            // Update all particles
             foreach (var particle in particles)
             {
                 // Evaluate current position
@@ -120,43 +163,114 @@ namespace Project.Services
                     bestFitness = fitness;
                     bestHorizontalAngle = particle.HorizontalPosition;
                     bestVerticalAngle = particle.VerticalPosition;
+                    searchCenterH = bestHorizontalAngle;
+                    searchCenterV = bestVerticalAngle;
+
+                    historicalBests.Add((bestHorizontalAngle, bestVerticalAngle, bestFitness));
+                    if (historicalBests.Count > MAX_HISTORY)
+                        historicalBests.RemoveAt(0);
                 }
 
-                // Update velocities with momentum
+                // Calculate cognitive and social influence
                 double r1 = random.NextDouble();
                 double r2 = random.NextDouble();
 
-                particle.HorizontalVelocity = currentW * particle.HorizontalVelocity +
-                    C1 * r1 * (particle.BestHorizontalPosition - particle.HorizontalPosition) +
-                    C2 * r2 * (bestHorizontalAngle - particle.HorizontalPosition);
+                double cognitiveH = COGNITIVE * r1 * GetAngleDifference(particle.BestHorizontalPosition, particle.HorizontalPosition);
+                double socialH = SOCIAL * r2 * GetAngleDifference(bestHorizontalAngle, particle.HorizontalPosition);
 
-                particle.VerticalVelocity = currentW * particle.VerticalVelocity +
-                    C1 * r1 * (particle.BestVerticalPosition - particle.VerticalPosition) +
-                    C2 * r2 * (bestVerticalAngle - particle.VerticalPosition);
+                double cognitiveV = COGNITIVE * r1 * (particle.BestVerticalPosition - particle.VerticalPosition);
+                double socialV = SOCIAL * r2 * (bestVerticalAngle - particle.VerticalPosition);
 
-                // Velocity bounds
-                double maxVelH = searchAreaH * 0.1;
-                double maxVelV = searchAreaV * 0.1;
+                // Update velocities
+                particle.HorizontalVelocity = currentInertia * particle.HorizontalVelocity + cognitiveH + socialH;
+                particle.VerticalVelocity = currentInertia * particle.VerticalVelocity + cognitiveV + socialV;
 
-                particle.HorizontalVelocity = Math.Max(-maxVelH, Math.Min(maxVelH, particle.HorizontalVelocity));
-                particle.VerticalVelocity = Math.Max(-maxVelV, Math.Min(maxVelV, particle.VerticalVelocity));
+                // Enforce velocity limits
+                particle.HorizontalVelocity = Math.Max(-maxVelocityH, Math.Min(maxVelocityH, particle.HorizontalVelocity));
+                particle.VerticalVelocity = Math.Max(-maxVelocityV, Math.Min(maxVelocityV, particle.VerticalVelocity));
 
-                // Update positions with bounds checking
+                // Update positions
                 particle.HorizontalPosition = (particle.HorizontalPosition + particle.HorizontalVelocity + 360.0) % 360.0;
                 particle.VerticalPosition = Math.Max(0, Math.Min(90.0, particle.VerticalPosition + particle.VerticalVelocity));
             }
 
+            // Apply adaptive behavior
+            AdaptToSignalQuality(bestFitness, searchAreaH, searchAreaV);
+            explorationFactor *= EXPLORATION_DECAY;
+
             return (bestHorizontalAngle, bestVerticalAngle);
         }
 
-        // Tarama alanını sıfırla ve parçacıkları yeniden başlat
+        private double GetAngleDifference(double targetAngle, double currentAngle)
+        {
+            double diff = ((targetAngle - currentAngle + 540.0) % 360.0) - 180.0;
+            return diff;
+        }
+
+        private void InjectDiversity(double searchAreaH, double searchAreaV, double targetH, double targetV)
+        {
+            // Find the worst performing 30% of particles
+            int refreshCount = particles.Count / 3;
+            var worstParticles = particles
+                .OrderBy(p => p.BestFitness)
+                .Take(refreshCount)
+                .ToList();
+
+            // Reposition these particles around the target position with some randomness
+            foreach (var particle in worstParticles)
+            {
+                double randomOffsetH = (random.NextDouble() - 0.5) * searchAreaH;
+                double randomOffsetV = (random.NextDouble() - 0.5) * searchAreaV;
+
+                particle.HorizontalPosition = (targetH + randomOffsetH + 360.0) % 360.0;
+                particle.VerticalPosition = Math.Max(0, Math.Min(90.0, targetV + randomOffsetV));
+
+                particle.HorizontalVelocity = (random.NextDouble() - 0.5) * maxVelocityH;
+                particle.VerticalVelocity = (random.NextDouble() - 0.5) * maxVelocityV;
+
+                particle.BestFitness = double.MinValue;
+            }
+        }
+
+        private void AdaptToSignalQuality(double signalQuality, double searchAreaH, double searchAreaV)
+        {
+            // Adaptive behavior based on signal quality
+            if (signalQuality >= EXCELLENT_SIGNAL)
+            {
+                // Fine-tune with smaller steps
+                maxVelocityH = searchAreaH * 0.05;
+                maxVelocityV = searchAreaV * 0.05;
+            }
+            else if (signalQuality >= GOOD_SIGNAL)
+            {
+                // Moderate movement
+                maxVelocityH = searchAreaH * 0.1;
+                maxVelocityV = searchAreaV * 0.1;
+            }
+            else if (signalQuality >= FAIR_SIGNAL)
+            {
+                // More aggressive search
+                maxVelocityH = searchAreaH * 0.15;
+                maxVelocityV = searchAreaV * 0.15;
+            }
+            else
+            {
+                // Wide search for poor signals
+                maxVelocityH = searchAreaH * 0.2;
+                maxVelocityV = searchAreaV * 0.2;
+            }
+        }
+
         public void Reset()
         {
             iteration = 0;
-            currentW = W_START;
+            currentInertia = INERTIA_START;
             bestFitness = double.MinValue;
+            prevBestFitness = double.MinValue;
+            stagnationCount = 0;
+            explorationFactor = 1.0;
+            historicalBests.Clear();
             particles.Clear();
-            InitializeParticles(40);
         }
 
         private class Particle2D

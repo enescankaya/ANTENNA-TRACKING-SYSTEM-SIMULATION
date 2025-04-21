@@ -21,5 +21,6 @@
         public double ScanAreaSize { get; set; }     // Mevcut tarama alanı boyutu (derece)
         public double TargetAngle { get; set; }      // Hedeflenen açı
         public double LastSignalUpdate { get; set; } // Son sinyal güncellemesi zamanı
+
     }
 }

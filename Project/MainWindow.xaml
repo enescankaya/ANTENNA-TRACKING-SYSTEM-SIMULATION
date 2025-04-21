@@ -612,6 +612,14 @@
                                          Foreground="#FF00FF00"/>
                             </Grid>
 
+                            <!-- Scan Area Display -->
+                            <TextBlock x:Name="ScanAreaSize"
+                                     Text="Scan Area: 360°"
+                                     FontSize="14"
+                                     FontWeight="SemiBold"
+                                     Foreground="#FF00FF00"
+                                     Margin="0,5,0,0"/>
+
                             <!-- Angles Display -->
                             <UniformGrid Columns="2" Margin="0,15,0,0">
                                 <!-- Horizontal Angle -->
