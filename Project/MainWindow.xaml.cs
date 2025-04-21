@@ -316,13 +316,22 @@ namespace Project
                 {
                     double scanAngleRad = scanningAntenna.HorizontalAngle * Math.PI / 180;
                     double scanV = scanningAntenna.VerticalAngle;
-                    double length = 120 + 30 * (scanV / 90.0); // Dikey açıya göre uzunluk
-
+                    double length = 100 + 20 * (scanV / 90.0); // Kısa ve kalın
                     scanningLine.X1 = antennaPoint.X;
                     scanningLine.Y1 = antennaPoint.Y;
                     scanningLine.X2 = antennaPoint.X + length * Math.Cos(scanAngleRad);
                     scanningLine.Y2 = antennaPoint.Y + length * Math.Sin(scanAngleRad);
-                    scanningLine.StrokeThickness = 2;
+                    scanningLine.StrokeThickness = 4;
+
+                    // Uçta küçük mavi daire
+                    Ellipse scanTip = MapCanvas.Children.OfType<Ellipse>().FirstOrDefault(e => e.Tag as string == "ScanTip");
+                    if (scanTip == null)
+                    {
+                        scanTip = new Ellipse { Width = 10, Height = 10, Fill = Brushes.Blue, Tag = "ScanTip" };
+                        MapCanvas.Children.Add(scanTip);
+                    }
+                    Canvas.SetLeft(scanTip, scanningLine.X2 - 5);
+                    Canvas.SetTop(scanTip, scanningLine.Y2 - 5);
                 }
 
                 // Yönlenme anteni çizgisi (yeşil)
@@ -331,13 +340,22 @@ namespace Project
                 {
                     double dirAngleRad = directionalAntenna.HorizontalAngle * Math.PI / 180;
                     double dirV = directionalAntenna.VerticalAngle;
-                    double length = 120 + 30 * (dirV / 90.0);
-
+                    double length = 160 + 40 * (dirV / 90.0); // Uzun ve ince
                     directionalLine.X1 = antennaPoint.X;
                     directionalLine.Y1 = antennaPoint.Y;
                     directionalLine.X2 = antennaPoint.X + length * Math.Cos(dirAngleRad);
                     directionalLine.Y2 = antennaPoint.Y + length * Math.Sin(dirAngleRad);
                     directionalLine.StrokeThickness = 2;
+
+                    // Uçta küçük yeşil daire
+                    Ellipse dirTip = MapCanvas.Children.OfType<Ellipse>().FirstOrDefault(e => e.Tag as string == "DirTip");
+                    if (dirTip == null)
+                    {
+                        dirTip = new Ellipse { Width = 10, Height = 10, Fill = Brushes.Green, Tag = "DirTip" };
+                        MapCanvas.Children.Add(dirTip);
+                    }
+                    Canvas.SetLeft(dirTip, directionalLine.X2 - 5);
+                    Canvas.SetTop(dirTip, directionalLine.Y2 - 5);
                 }
             }
             catch (Exception ex)

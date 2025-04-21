@@ -35,11 +35,11 @@ namespace Project.Services
         {
             if (airplane == null) return;
 
-            // Anten konumunu güncel tut
             double antennaLat = antenna.Latitude;
             double antennaLon = antenna.Longitude;
             double antennaAlt = antenna.Altitude;
 
+            // Her zaman PSO ile arama yap, best açıları sürekli güncelle
             if (isInitialScan)
             {
                 if (scanStartTime == default)
@@ -71,6 +71,7 @@ namespace Project.Services
                 double centerH = bestHorizontalAngle;
                 double centerV = bestVerticalAngle;
 
+                // PSO taraması: merkez etrafında, best* değerleri sürekli güncellenir
                 var (offsetH, offsetV) = pso.ScanStep(
                     (h, v) =>
                     {
@@ -94,9 +95,10 @@ namespace Project.Services
                 }
             }
 
+            // Her zaman en iyi sinyali ve açılarını güncelle
             double signal = CalculateSignalStrength(antenna.HorizontalAngle, antenna.VerticalAngle, antennaLat, antennaLon, antennaAlt, airplane);
             antenna.SignalStrength = signalFilter.Update(signal);
-            if (signal > bestSignalStrength)
+            if (signal > bestSignalStrength || isInitialScan)
             {
                 bestSignalStrength = signal;
                 bestHorizontalAngle = antenna.HorizontalAngle;
@@ -109,11 +111,10 @@ namespace Project.Services
         {
             if (airplane == null) return;
 
-            // Tarama anteninin bulduğu en iyi açıya yönlen
-            antenna.HorizontalAngle = horizontalFilter.Update(scanningAntenna.HorizontalAngle);
-            antenna.VerticalAngle = verticalFilter.Update(scanningAntenna.VerticalAngle);
+            // Yönlenme anteni, tarama anteninin bulduğu EN İYİ açıya yumuşak şekilde yönlenir
+            antenna.HorizontalAngle = horizontalFilter.Update(bestHorizontalAngle);
+            antenna.VerticalAngle = verticalFilter.Update(bestVerticalAngle);
 
-            // Anten konumunu güncel tut
             double antennaLat = antenna.Latitude;
             double antennaLon = antenna.Longitude;
             double antennaAlt = antenna.Altitude;
@@ -122,7 +123,6 @@ namespace Project.Services
             UpdateSignalMetrics(antenna);
         }
 
-        // Uçak ve anten konumuna göre sinyal gücü hesaplama
         private double CalculateSignalStrength(double antennaH, double antennaV, double antennaLat, double antennaLon, double antennaAlt, AirplaneState airplane)
         {
             double dLat = (airplane.Latitude - antennaLat) * 111000;
