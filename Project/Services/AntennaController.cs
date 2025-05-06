@@ -15,11 +15,20 @@ namespace Project.Services
         private readonly KalmanFilter signalFilter;
         private readonly ParticleSwarmOptimizer pso;
 
-        // Scan area parameters
-        private const double MIN_SCAN_AREA_H = 10.0;  // Minimum horizontal scan area in degrees
-        private const double MIN_SCAN_AREA_V = 5.0;   // Minimum vertical scan area in degrees
-        private const double MAX_SCAN_AREA_H = 360.0; // Maximum horizontal scan area in degrees
-        private const double MAX_SCAN_AREA_V = 90.0;  // Maximum vertical scan area in degrees
+        // Scan area parameters - değişkenleri güncelle
+        private const double INITIAL_SCAN_AREA_H = 360.0;
+        private const double INITIAL_SCAN_AREA_V = 90.0;
+        private const double MIN_SCAN_AREA_H = 10.0;
+        private const double MIN_SCAN_AREA_V = 5.0;
+        private const double MAX_SCAN_AREA_H = INITIAL_SCAN_AREA_H; // Maximum değeri başlangıç değerine eşitle
+        private const double MAX_SCAN_AREA_V = INITIAL_SCAN_AREA_V; // Maximum değeri başlangıç değerine eşitle
+        private const double SCAN_AREA_REDUCTION_RATE = 0.95; // Her adımda %5 küçült
+
+        // Sinyal eşikleri - kademeli küçültme için
+        private const double EXCELLENT_SIGNAL = 80.0;
+        private const double GOOD_SIGNAL = 60.0;
+        private const double FAIR_SIGNAL = 40.0;
+        private const double POOR_SIGNAL = 20.0;
 
         // Initial scan parameters - Tarama süresini artır
         private const double INITIAL_SCAN_DURATION = 30.0; // 30 saniyeye çıkarıldı
@@ -73,11 +82,18 @@ namespace Project.Services
         private const int MAX_HISTORY_POINTS = 10;
 
         // Debugging and visualization properties
-        private double horizontalScanArea = MAX_SCAN_AREA_H;
-        private double verticalScanArea = MAX_SCAN_AREA_V;
+        private double horizontalScanArea = INITIAL_SCAN_AREA_H;
+        private double verticalScanArea = INITIAL_SCAN_AREA_V;
         private int scanPhaseDegrees = 0;
         private bool targetLocked = false;
         private string currentScanMode = "Initial Scan";
+
+        // Exploration fazı için ek değişkenler
+        private bool isExplorationPhase = true;
+        private double explorationElapsed = 0;
+        private const double EXPLORATION_DURATION = 8.0; // saniye, ilk fazda tüm alanı tarama süresi
+        private double explorationAngle = 0;
+        private double explorationAngleStep = 10.0; // Her adımda 10 derece kaydır
 
         // Public properties for UI display and monitoring
         public bool IsInitialScan => isInitialScan;
@@ -128,20 +144,44 @@ namespace Project.Services
             double antennaLon = antenna.Longitude;
             double antennaAlt = antenna.Altitude;
 
-            // Calculate where the aircraft should be relative to antenna position
-            GetTargetAngles(antennaLat, antennaLon, antennaAlt, airplane, out double targetH, out double targetV);
+            // 1. Exploration fazı: PSO yok, sistematik sweep ile tüm alanı gez
+            if (isExplorationPhase)
+            {
+                currentScanMode = "Exploration Sweep";
+                explorationElapsed += SCAN_UPDATE_RATE;
+                // Sweep açısını ilerlet
+                explorationAngle = (explorationAngle + explorationAngleStep) % 360.0;
+                double sweepV = 45.0 + 40.0 * Math.Sin((explorationAngle / 360.0) * Math.PI); // 10-80 derece arası yukarı-aşağı
+                antenna.HorizontalAngle = horizontalFilter.Update(explorationAngle);
+                antenna.VerticalAngle = verticalFilter.Update(sweepV);
 
-            // Store these target angles for later use
-            lastKnownTargetH = targetH;
-            lastKnownTargetV = targetV;
+                // Sinyal ölçümü
+                double signal = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
+                signal = signalFilter.Update(signal);
+                antenna.SignalStrength = signal;
 
-            // Update position history for movement prediction
-            UpdatePositionHistory(targetH, targetV);
+                // En iyi sinyali kaydet
+                if (signal > bestSignalStrength)
+                {
+                    bestSignalStrength = signal;
+                    bestHorizontalAngle = antenna.HorizontalAngle;
+                    bestVerticalAngle = antenna.VerticalAngle;
+                }
 
-            // Predict aircraft movement for proactive tracking
-            PredictTargetMovement();
+                // Exploration süresi dolduysa veya güçlü sinyal bulduysa PSO fazına geç
+                if (explorationElapsed >= EXPLORATION_DURATION || bestSignalStrength > 30)
+                {
+                    isExplorationPhase = false;
+                    isInitialScan = true;
+                    scanStartTime = DateTime.Now;
+                    // PSO arama alanını geniş başlat
+                    horizontalScanArea = INITIAL_SCAN_AREA_H;
+                    verticalScanArea = INITIAL_SCAN_AREA_V;
+                }
+                return;
+            }
 
-            // Choose tracking strategy based on scan phase
+            // 2. PSO ile kademeli daralan tarama (mevcut mantık)
             if (isInitialScan)
             {
                 currentScanMode = "Initial 360° Scan";
@@ -153,21 +193,21 @@ namespace Project.Services
                 currentScanMode = "Wide Area Search";
                 targetLocked = false;
                 // Poor signal - use wider search pattern around last known position
-                PerformWideAreaSearch(antenna, airplane, antennaLat, antennaLon, antennaAlt, targetH, targetV);
+                PerformWideAreaSearch(antenna, airplane, antennaLat, antennaLon, antennaAlt, lastKnownTargetH, lastKnownTargetV);
             }
             else if (bestSignalStrength < TRACKING_THRESHOLD)
             {
                 currentScanMode = "Signal Acquisition";
                 targetLocked = false;
                 // Medium signal - PSO with moderate search area
-                PerformSignalAcquisition(antenna, airplane, antennaLat, antennaLon, antennaAlt, targetH, targetV);
+                PerformSignalAcquisition(antenna, airplane, antennaLat, antennaLon, antennaAlt, lastKnownTargetH, lastKnownTargetV);
             }
             else
             {
                 currentScanMode = "Target Tracking";
                 targetLocked = true;
                 // Good signal - precision tracking with PSO
-                PerformTargetTracking(antenna, airplane, antennaLat, antennaLon, antennaAlt, targetH, targetV);
+                PerformTargetTracking(antenna, airplane, antennaLat, antennaLon, antennaAlt, lastKnownTargetH, lastKnownTargetV);
             }
 
             // Update signal metrics (RSSI, SNR) for display
@@ -177,65 +217,104 @@ namespace Project.Services
             scanPhaseDegrees = (int)(antenna.HorizontalAngle % 360);
         }
 
+        // SimulateSignalStrength fonksiyonunu gerçekçi hale getir
+        private double SimulateSignalStrength(AntennaState antenna, AirplaneState airplane,
+                                           double antennaLat, double antennaLon, double antennaAlt)
+        {
+            GetTargetAngles(antennaLat, antennaLon, antennaAlt, airplane, out double targetH, out double targetV);
+
+            // Gerçek mesafe
+            double distance = CalculateDistance(antennaLat, antennaLon, antennaAlt,
+                                             airplane.Latitude, airplane.Longitude, airplane.Altitude);
+
+            // Açısal sapma
+            double hDiff = Math.Abs(((targetH - antenna.HorizontalAngle + 540.0) % 360.0) - 180.0);
+            double vDiff = Math.Abs(targetV - antenna.VerticalAngle);
+
+            // Mesafe bazlı zayıflama (logaritmik, gerçekçi)
+            double maxRange = 100000.0; // 100km
+            double minRange = 100.0;    // 100m
+            double normDist = Math.Min(1.0, Math.Max(0, (distance - minRange) / (maxRange - minRange)));
+            double distanceAttenuation = 1.0 - normDist; // Uzakta 0, yakında 1
+
+            // Açısal zayıflama (daha keskin anten paterni)
+            double beamAngleH = 15.0;
+            double beamAngleV = 10.0;
+            double hGain = Math.Exp(-1.0 * Math.Pow(hDiff / (beamAngleH * 0.5), 2));
+            double vGain = Math.Exp(-1.0 * Math.Pow(vDiff / (beamAngleV * 0.5), 2));
+
+            // Toplam sinyal gücü
+            double baseSignal = 100.0;
+            double totalGain = hGain * vGain * distanceAttenuation;
+            double signalStrength = baseSignal * totalGain;
+
+            // SNR ve RSSI
+            double noiseFloor = -90.0;
+            double receivedPower = signalStrength - 100.0;
+            antenna.SNR = Math.Max(0, receivedPower - noiseFloor);
+            antenna.RSSI = -110.0 + signalStrength * 0.6;
+
+            return Math.Max(0, Math.Min(100, signalStrength));
+        }
+
         /// <summary>
         /// Initial 360° × 90° scan to locate aircraft
         /// </summary>
         private void PerformInitialScan(AntennaState antenna, AirplaneState airplane,
                                       double antennaLat, double antennaLon, double antennaAlt)
         {
-            // Generate scan grid if not already done or scan is restarting
-            if (scanStartTime == default || initialScanGrid.Count == 0)
+            if ((DateTime.Now - lastPsoUpdate).TotalSeconds >= PSO_UPDATE_RATE)
             {
-                scanStartTime = DateTime.Now;
-                initialScanIndex = 0;
-                bestSignalStrength = 0;
-                bestHorizontalAngle = 0;
-                bestVerticalAngle = 0;
-                horizontalScanArea = MAX_SCAN_AREA_H;
-                verticalScanArea = MAX_SCAN_AREA_V;
-                GenerateInitialScanGrid();
-            }
+                lastPsoUpdate = DateTime.Now;
 
-            // Progress through the scan grid based on elapsed time
-            double elapsed = (DateTime.Now - scanStartTime).TotalSeconds;
-            double scanProgress = Math.Min(1.0, elapsed / INITIAL_SCAN_DURATION);
-            int targetIndex = (int)(scanProgress * initialScanGrid.Count);
+                // PSO fitness fonksiyonu - koordinat bazlı optimizasyon
+                Func<double, double, double> initialScanFitness = (h, v) =>
+                {
+                    antenna.HorizontalAngle = h;
+                    antenna.VerticalAngle = v;
 
-            // Clamp index to grid size
-            if (targetIndex >= initialScanGrid.Count)
-                targetIndex = initialScanGrid.Count - 1;
+                    // Sinyal gücünü ölç
+                    double signal = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
+                    signal = signalFilter.Update(signal);
 
-            // Only advance if not already at this index
-            if (initialScanIndex < targetIndex)
-                initialScanIndex = targetIndex;
+                    // Tarama alanını sinyal gücüne göre ayarla
+                    if (signal > bestSignalStrength)
+                    {
+                        bestSignalStrength = signal;
+                        bestHorizontalAngle = h;
+                        bestVerticalAngle = v;
 
-            // Get current scan point
-            var (targetHorizontalAngle, targetVerticalAngle) = initialScanGrid[initialScanIndex];
+                        // Kademeli daralma
+                        horizontalScanArea = Math.Max(MIN_SCAN_AREA_H,
+                            horizontalScanArea * (1.0 - (signal / 100.0) * 0.2)); // Her adımda max %20 daralma
+                        verticalScanArea = Math.Max(MIN_SCAN_AREA_V,
+                            verticalScanArea * (1.0 - (signal / 100.0) * 0.2));
+                    }
 
-            // Smooth antenna movement
-            antenna.HorizontalAngle = horizontalFilter.Update(targetHorizontalAngle);
-            antenna.VerticalAngle = verticalFilter.Update(targetVerticalAngle);
+                    return signal;
+                };
 
-            // Measure and filter signal strength
-            double signal = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
-            signal = signalFilter.Update(signal);
-            antenna.SignalStrength = signal;
+                var (optH, optV) = pso.ScanStep(
+                    initialScanFitness,
+                    horizontalScanArea,
+                    verticalScanArea,
+                    bestHorizontalAngle > 0 ? bestHorizontalAngle : 180.0, // İlk taramada ortadan başla
+                    bestVerticalAngle > 0 ? bestVerticalAngle : 45.0,
+                    bestSignalStrength > FAIR_SIGNAL
+                );
 
-            // Update best signal
-            if (signal > bestSignalStrength)
-            {
-                bestSignalStrength = signal;
-                bestHorizontalAngle = antenna.HorizontalAngle;
-                bestVerticalAngle = antenna.VerticalAngle;
-            }
+                // Kalman filtresi ile yumuşatılmış hareket
+                antenna.HorizontalAngle = horizontalFilter.Update(optH);
+                antenna.VerticalAngle = verticalFilter.Update(optV);
+                antenna.SignalStrength = bestSignalStrength;
 
-            // End scan if complete or strong signal found
-            if (initialScanIndex >= initialScanGrid.Count - 1 || signal > TRACKING_THRESHOLD * 1.2)
-            {
-                isInitialScan = false;
-                pso.Reset();
-                horizontalScanArea = Math.Max(MIN_SCAN_AREA_H, 90.0);
-                verticalScanArea = Math.Max(MIN_SCAN_AREA_V, 45.0);
+                // Yeterli sinyal bulunduğunda initial scan'i bitir
+                if (bestSignalStrength > GOOD_SIGNAL ||
+                    (horizontalScanArea <= MIN_SCAN_AREA_H * 2 && bestSignalStrength > FAIR_SIGNAL))
+                {
+                    isInitialScan = false;
+                    currentScanMode = "Signal Acquired";
+                }
             }
         }
 
@@ -297,42 +376,6 @@ namespace Project.Services
             UpdateSignalMetrics(directionalAntenna);
 
             Console.WriteLine($"Directional antenna at H:{smoothedH:F1}° V:{smoothedV:F1}° Signal:{signal:F1}");
-        }
-
-        /// <summary>
-        /// Simulate signal strength based on antenna position relative to aircraft
-        /// </summary>
-        private double SimulateSignalStrength(AntennaState antenna, AirplaneState airplane,
-                                           double antennaLat, double antennaLon, double antennaAlt)
-        {
-            GetTargetAngles(antennaLat, antennaLon, antennaAlt, airplane, out double targetH, out double targetV);
-
-            // Açı farklarını doğru hesapla
-            double hDiff = Math.Abs(((targetH - antenna.HorizontalAngle + 540.0) % 360.0) - 180.0);
-            double vDiff = Math.Abs(antenna.VerticalAngle - targetV);
-
-            // Daha dar anten paterni
-            double beamAngleH = 20.0;  // Ana lob genişliği azaltıldı
-            double beamAngleV = 15.0;  // Ana lob genişliği azaltıldı
-
-            // Gaussian anten paterni
-            double hGain = Math.Exp(-0.5 * Math.Pow(hDiff / (beamAngleH * 0.5), 2));
-            double vGain = Math.Exp(-0.5 * Math.Pow(vDiff / (beamAngleV * 0.5), 2));
-
-            // Mesafeye bağlı zayıflama
-            double distance = CalculateDistance(antennaLat, antennaLon, antennaAlt,
-                                             airplane.Latitude, airplane.Longitude, airplane.Altitude);
-
-            double maxRange = 100000.0; // 100km maksimum menzil
-            double distanceFactor = Math.Pow(Math.Max(0, 1.0 - distance / maxRange), 0.5);
-
-            // Toplam sinyal gücü
-            double signal = 100.0 * hGain * vGain * distanceFactor;
-
-            // Minimum gürültü
-            double noise = (new Random().NextDouble() - 0.5) * 0.5;
-
-            return Math.Max(0, Math.Min(100, signal + noise));
         }
 
         private double CalculateDistance(double lat1, double lon1, double alt1,
@@ -714,8 +757,8 @@ namespace Project.Services
             verticalVelocity = 0;
 
             // Reset scan areas
-            horizontalScanArea = MAX_SCAN_AREA_H;
-            verticalScanArea = MAX_SCAN_AREA_V;
+            horizontalScanArea = INITIAL_SCAN_AREA_H;
+            verticalScanArea = INITIAL_SCAN_AREA_V;
 
             // Reset histories
             positionHistory.Clear();
@@ -729,6 +772,11 @@ namespace Project.Services
             lastScanUpdate = DateTime.MinValue;
             lastPsoUpdate = DateTime.MinValue;
             lastPositionUpdate = DateTime.MinValue;
+
+            // Reset exploration phase
+            isExplorationPhase = true;
+            explorationElapsed = 0;
+            explorationAngle = 0;
         }
 
         /// <summary>

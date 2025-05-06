@@ -72,42 +72,33 @@ namespace Project.Services
         {
             particles.Clear();
 
-            // Enhanced initialization strategy:
-            // - Grid-based particles for thorough coverage (70%)
-            // - Randomized particles for exploration (30%)
-            int gridPoints = (int)Math.Sqrt(count * 0.7);
-            double gridStepH = 360.0 / gridPoints;
-            double gridStepV = 90.0 / gridPoints;
+            // Artan yoğunlukta grid
+            int gridSize = (int)Math.Sqrt(count * 0.8); // %80 grid bazlı
+            double angleStepH = 360.0 / gridSize;
+            double angleStepV = 90.0 / gridSize;
 
-            int particleIndex = 0;
-
-            // Create grid-based particles with deliberate distribution
-            for (int i = 0; i < gridPoints && particleIndex < count; i++)
+            for (int i = 0; i < gridSize; i++)
             {
-                for (int j = 0; j < gridPoints && particleIndex < count; j++)
+                for (int j = 0; j < gridSize; j++)
                 {
-                    // Distribute particles across full 360-degree horizontal range
-                    // and 90-degree vertical range with small randomness
-                    double h = (i * gridStepH + random.NextDouble() * (gridStepH * 0.5)) % 360.0;
-                    double v = Math.Min(90.0, j * gridStepV + random.NextDouble() * (gridStepV * 0.5));
+                    double h = (i * angleStepH + random.NextDouble() * angleStepH) % 360.0;
+                    double v = Math.Min(90.0, j * angleStepV + random.NextDouble() * angleStepV);
 
                     particles.Add(new Particle2D
                     {
                         HorizontalPosition = h,
                         VerticalPosition = v,
-                        HorizontalVelocity = (random.NextDouble() - 0.5) * maxVelocityH * 0.5,
-                        VerticalVelocity = (random.NextDouble() - 0.5) * maxVelocityV * 0.5,
+                        HorizontalVelocity = 0,
+                        VerticalVelocity = 0,
                         BestHorizontalPosition = h,
                         BestVerticalPosition = v,
                         BestFitness = double.MinValue
                     });
-
-                    particleIndex++;
                 }
             }
 
-            // Fill remaining with uniform random distribution for exploration
-            while (particleIndex < count)
+            // Kalan %20'yi rastgele dağıt
+            while (particles.Count < count)
             {
                 double h = random.NextDouble() * 360.0;
                 double v = random.NextDouble() * 90.0;
@@ -116,14 +107,12 @@ namespace Project.Services
                 {
                     HorizontalPosition = h,
                     VerticalPosition = v,
-                    HorizontalVelocity = (random.NextDouble() - 0.5) * maxVelocityH,
-                    VerticalVelocity = (random.NextDouble() - 0.5) * maxVelocityV,
+                    HorizontalVelocity = 0,
+                    VerticalVelocity = 0,
                     BestHorizontalPosition = h,
                     BestVerticalPosition = v,
                     BestFitness = double.MinValue
                 });
-
-                particleIndex++;
             }
         }
 
