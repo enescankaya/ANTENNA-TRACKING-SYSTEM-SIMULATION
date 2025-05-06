@@ -18,8 +18,8 @@ namespace Project.Services
         // Scan area parameters - değişkenleri güncelle
         private const double INITIAL_SCAN_AREA_H = 360.0;
         private const double INITIAL_SCAN_AREA_V = 90.0;
-        private const double MIN_SCAN_AREA_H = 10.0;
-        private const double MIN_SCAN_AREA_V = 5.0;
+        private const double MIN_SCAN_AREA_H = 15.0;       // Daha geniş minimum tarama (önceki: 10.0)
+        private const double MIN_SCAN_AREA_V = 7.5;        // Daha geniş minimum tarama (önceki: 5.0)
         private const double MAX_SCAN_AREA_H = INITIAL_SCAN_AREA_H; // Maximum değeri başlangıç değerine eşitle
         private const double MAX_SCAN_AREA_V = INITIAL_SCAN_AREA_V; // Maximum değeri başlangıç değerine eşitle
         private const double SCAN_AREA_REDUCTION_RATE = 0.95; // Her adımda %5 küçült
@@ -32,8 +32,8 @@ namespace Project.Services
 
         // Initial scan parameters - Tarama süresini artır
         private const double INITIAL_SCAN_DURATION = 30.0; // 30 saniyeye çıkarıldı
-        private const double SIGNAL_LOSS_THRESHOLD = 20.0; // Eşiği yükselt
-        private const double TRACKING_THRESHOLD = 50.0;    // Takip eşiğini yükselt
+        private const double TRACKING_THRESHOLD = 40.0;    // Daha düşük eşik (önceki: 50.0)
+        private const double SIGNAL_LOSS_THRESHOLD = 15.0; // Daha düşük eşik (önceki: 20.0)
 
         // Target weighting factors
         private const double TARGET_WEIGHT = 0.7;      // How much to favor the calculated target position
@@ -64,7 +64,7 @@ namespace Project.Services
         private DateTime lastScanUpdate = DateTime.MinValue;
         private const double SCAN_UPDATE_RATE = 0.05;  // 20Hz'e düşür
         private DateTime lastPsoUpdate = DateTime.MinValue;
-        private const double PSO_UPDATE_RATE = 0.1;    // 10Hz'e düşür
+        private const double PSO_UPDATE_RATE = 0.05;    // 10Hz'e düşür
 
         // Signal quality tracking
         private double signalQualityHistory = 0;
@@ -119,13 +119,12 @@ namespace Project.Services
 
         public AntennaController()
         {
-            // Kalman filtre parametrelerini düzelt
-            horizontalFilter = new KalmanFilter(0.05, 0.5, 0.2);  // Daha yavaş tepki
-            verticalFilter = new KalmanFilter(0.05, 0.5, 0.2);    // Daha yavaş tepki
-            signalFilter = new KalmanFilter(0.1, 0.3, 0.1);       // Sinyal filtresini hassaslaştır
+            // Düzeltme: Kalman filtre parametrelerini daha hızlı tepki için ayarla
+            horizontalFilter = new KalmanFilter(0.25, 0.3, 0.5);  // Daha hızlı tepki (önceki: 0.05, 0.5, 0.2)
+            verticalFilter = new KalmanFilter(0.25, 0.3, 0.5);    // Daha hızlı tepki 
+            signalFilter = new KalmanFilter(0.3, 0.2, 0.3);       // Sinyal filtresini daha da hassaslaştır
 
-            pso = new ParticleSwarmOptimizer(100); // Parçacık sayısını artır
-
+            pso = new ParticleSwarmOptimizer(100); // Parçacık sayısı yeterli
             Reset();
         }
 
@@ -136,14 +135,47 @@ namespace Project.Services
         {
             if (airplane == null) return;
 
-            // Rate limit updates to maintain system performance
-            if ((DateTime.Now - lastScanUpdate).TotalSeconds < SCAN_UPDATE_RATE) return;
+            // Düzeltme: Güncelleme hızını artır
+            if ((DateTime.Now - lastScanUpdate).TotalSeconds < SCAN_UPDATE_RATE * 0.5) return;
             lastScanUpdate = DateTime.Now;
 
             double antennaLat = antenna.Latitude;
             double antennaLon = antenna.Longitude;
             double antennaAlt = antenna.Altitude;
 
+            // Her durumda güncel hedef açılarını al
+            GetTargetAngles(antennaLat, antennaLon, antennaAlt, airplane, out double targetH, out double targetV);
+
+            // Gerçek hedef açılarını güncelle
+            lastKnownTargetH = targetH;
+            lastKnownTargetV = targetV;
+
+            // Düzeltme: Acquisition ve Tracking arasındaki geçişi kolaylaştır
+            if (!isInitialScan && !isExplorationPhase)
+            {
+                // Gerçek sinyal gücünü ölç
+                double realSignal = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
+
+                // Sinyal eşiklerini kontrol et
+                if (realSignal > TRACKING_THRESHOLD * 0.85 && !targetLocked)
+                {
+                    // Signal Acquisition -> Target Tracking geçişini kolaylaştır
+                    targetLocked = true;
+                    currentScanMode = "Target Tracking";
+                    bestSignalStrength = realSignal;
+                }
+                else if (realSignal < SIGNAL_LOSS_THRESHOLD * 1.2 && targetLocked)
+                {
+                    // Target Tracking -> Signal Acquisition geçişini hızlandır
+                    targetLocked = false;
+                    currentScanMode = "Signal Re-Acquisition";
+                    bestSignalStrength = realSignal;
+
+                    // Tarama alanını genişlet
+                    horizontalScanArea = Math.Min(MAX_SCAN_AREA_H, 60.0);
+                    verticalScanArea = Math.Min(MAX_SCAN_AREA_V, 30.0);
+                }
+            }
             // 1. Exploration fazı: PSO yok, sistematik sweep ile tüm alanı gez
             if (isExplorationPhase)
             {
@@ -180,40 +212,31 @@ namespace Project.Services
                 }
                 return;
             }
-
-            // 2. PSO ile kademeli daralan tarama (mevcut mantık)
-            if (isInitialScan)
+            else if (isInitialScan)
             {
                 currentScanMode = "Initial 360° Scan";
-                // Initial scan phase - systematic grid search of entire space
                 PerformInitialScan(antenna, airplane, antennaLat, antennaLon, antennaAlt);
             }
             else if (bestSignalStrength < SIGNAL_LOSS_THRESHOLD)
             {
                 currentScanMode = "Wide Area Search";
                 targetLocked = false;
-                // Poor signal - use wider search pattern around last known position
                 PerformWideAreaSearch(antenna, airplane, antennaLat, antennaLon, antennaAlt, lastKnownTargetH, lastKnownTargetV);
             }
-            else if (bestSignalStrength < TRACKING_THRESHOLD)
+            else if (!targetLocked || bestSignalStrength < TRACKING_THRESHOLD)
             {
                 currentScanMode = "Signal Acquisition";
                 targetLocked = false;
-                // Medium signal - PSO with moderate search area
                 PerformSignalAcquisition(antenna, airplane, antennaLat, antennaLon, antennaAlt, lastKnownTargetH, lastKnownTargetV);
             }
             else
             {
                 currentScanMode = "Target Tracking";
-                targetLocked = true;
-                // Good signal - precision tracking with PSO
                 PerformTargetTracking(antenna, airplane, antennaLat, antennaLon, antennaAlt, lastKnownTargetH, lastKnownTargetV);
             }
 
-            // Update signal metrics (RSSI, SNR) for display
+            // Sinyal metriklerini güncelle...
             UpdateSignalMetrics(antenna);
-
-            // Update scan phase display (0-360)
             scanPhaseDegrees = (int)(antenna.HorizontalAngle % 360);
         }
 
@@ -221,7 +244,12 @@ namespace Project.Services
         private double SimulateSignalStrength(AntennaState antenna, AirplaneState airplane,
                                            double antennaLat, double antennaLon, double antennaAlt)
         {
+            // Gerçek hedef açılarını hesapla - bu önemli!
             GetTargetAngles(antennaLat, antennaLon, antennaAlt, airplane, out double targetH, out double targetV);
+
+            // Düzeltme: Hedef açılarını her zaman güncelle - bu çok önemli!
+            lastKnownTargetH = targetH;
+            lastKnownTargetV = targetV;
 
             // Gerçek mesafe
             double distance = CalculateDistance(antennaLat, antennaLon, antennaAlt,
@@ -256,7 +284,6 @@ namespace Project.Services
 
             return Math.Max(0, Math.Min(100, signalStrength));
         }
-
         /// <summary>
         /// Initial 360° × 90° scan to locate aircraft
         /// </summary>
@@ -396,11 +423,11 @@ namespace Project.Services
         /// </summary>
         private void UpdatePositionHistory(double targetH, double targetV)
         {
-            // Store current position with timestamp
+            // Şu anki pozisyonu zaman damgasıyla sakla
             positionHistory.Enqueue((targetH, targetV, DateTime.Now));
 
-            // Limit history size
-            if (positionHistory.Count > MAX_HISTORY_POINTS)
+            // Geçmiş boyutunu sınırla - daha kısa tarihçe daha hızlı adaptasyon
+            if (positionHistory.Count > 5) // Daha az geçmiş noktası (önceki: MAX_HISTORY_POINTS)
             {
                 positionHistory.Dequeue();
             }
@@ -411,31 +438,31 @@ namespace Project.Services
         /// </summary>
         private void PredictTargetMovement()
         {
-            // Need at least 2 history points to calculate velocity
+            // Hız hesaplamak için en az 2 geçmiş noktası gerekli
             if (positionHistory.Count < 2) return;
 
             var positions = positionHistory.ToArray();
             var oldest = positions[0];
             var newest = positions[positions.Length - 1];
 
-            // Calculate time difference between oldest and newest position
+            // En eski ve en yeni konum arasındaki zaman farkını hesapla
             double timeDiff = (newest.time - oldest.time).TotalSeconds;
-            if (timeDiff < 0.1) return; // Avoid division by small numbers
+            if (timeDiff < 0.1) return; // Küçük sayılara bölünmeyi önle
 
-            // Calculate horizontal angle change with wraparound handling (0-360 degrees)
+            // Sarmalama işlemini ele alarak yatay açı değişimini hesapla (0-360 derece)
             double hDiff = newest.h - oldest.h;
             if (hDiff > 180) hDiff -= 360;
             if (hDiff < -180) hDiff += 360;
 
-            // Calculate vertical angle change (0-90 degrees)
+            // Dikey açı değişimini hesapla (0-90 derece)
             double vDiff = newest.v - oldest.v;
 
-            // Calculate angular velocities
+            // Açısal hızları hesapla - daha duyarlı değerler
             horizontalVelocity = hDiff / timeDiff;
             verticalVelocity = vDiff / timeDiff;
 
-            // Predict position 0.5 seconds into future
-            double predictionTime = 0.5;
+            // Düzeltme: Daha kısa süre (0.2 saniye) için gelecek pozisyonu tahmin et
+            double predictionTime = 0.2; // Önceki: 0.5
             predictedHorizontalAngle = (newest.h + horizontalVelocity * predictionTime + 360) % 360;
             predictedVerticalAngle = Math.Max(0, Math.Min(90, newest.v + verticalVelocity * predictionTime));
 
@@ -525,62 +552,129 @@ namespace Project.Services
                                            double antennaLat, double antennaLon, double antennaAlt,
                                            double targetH, double targetV)
         {
-            // Adjust scan area based on signal strength - better signal means smaller search area
-            horizontalScanArea = Math.Max(MIN_SCAN_AREA_H, 60.0 * (1.0 - bestSignalStrength / 100.0));
-            verticalScanArea = Math.Max(MIN_SCAN_AREA_V, 30.0 * (1.0 - bestSignalStrength / 100.0));
+            // Düzeltme 1: Her durumda güncel hedef açılarını al
+            GetTargetAngles(antennaLat, antennaLon, antennaAlt, airplane, out double realTargetH, out double realTargetV);
+            lastKnownTargetH = realTargetH;
+            lastKnownTargetV = realTargetV;
 
-            // Use PSO for signal acquisition
-            if ((DateTime.Now - lastPsoUpdate).TotalSeconds >= PSO_UPDATE_RATE)
+            // Düzeltme 2: Gerçek sinyal gücünü ölç
+            double currentSignal = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
+
+            // Düzeltme 3: Sinyal hızlı bir şekilde düştüyse güncelleme yap
+            if (currentSignal < bestSignalStrength * 0.7)
+            {
+                bestSignalStrength = currentSignal;
+                // Tarama alanını genişlet
+                horizontalScanArea = Math.Min(MAX_SCAN_AREA_H, 90.0);
+                verticalScanArea = Math.Min(MAX_SCAN_AREA_V, 45.0);
+            }
+
+            // Düzeltme 4: Çok uzun süre bu modda kalındıysa reset at
+            if ((DateTime.Now - lastPsoUpdate).TotalSeconds > 3.0)
+            {
+                // Uzun süre sinyal bulunamadı, hedef konumuna yakın geniş tarama yap
+                horizontalScanArea = Math.Min(MAX_SCAN_AREA_H, 180.0);
+                verticalScanArea = Math.Min(MAX_SCAN_AREA_V, 90.0);
+
+                // PSO'yu kısmen sıfırla
+                pso.PartialReset();
+                bestHorizontalAngle = lastKnownTargetH;
+                bestVerticalAngle = lastKnownTargetV;
+                lastPsoUpdate = DateTime.Now;
+            }
+
+            // Düzeltme 5: Tarama alanını dinamik olarak ayarla - minimum değerler arttırıldı
+            horizontalScanArea = Math.Max(MIN_SCAN_AREA_H * 3, 60.0 * (1.0 - bestSignalStrength / 100.0));
+            verticalScanArea = Math.Max(MIN_SCAN_AREA_V * 3, 30.0 * (1.0 - bestSignalStrength / 100.0));
+
+            // Düzeltme 6: PSO güncelleme hızını arttır
+            if ((DateTime.Now - lastPsoUpdate).TotalSeconds >= PSO_UPDATE_RATE * 0.5)
             {
                 lastPsoUpdate = DateTime.Now;
 
-                // Calculate search center as weighted average of computed target and best signal
+                // Düzeltme 7: Arama merkezini gerçek hedef açılarına daha yakın yap
                 double searchCenterH = WeightedAngleAverage(
-                    targetH, bestHorizontalAngle, TARGET_WEIGHT, SIGNAL_WEIGHT);
-                double searchCenterV = targetV * TARGET_WEIGHT + bestVerticalAngle * SIGNAL_WEIGHT;
+                    realTargetH,  // Gerçek hedef açısı - daha önce lastKnownTargetH kullanılıyordu
+                    bestHorizontalAngle,
+                    0.6,          // Gerçek hedefe daha fazla ağırlık (öncekinden yüksek)
+                    0.4);         // En iyi sinyale az ağırlık
 
-                // Custom fitness function for acquisition phase
+                double searchCenterV =
+                    realTargetV * 0.6 + // Gerçek hedefe daha fazla ağırlık
+                    bestVerticalAngle * 0.4; // En iyi sinyale az ağırlık
+
+                // Düzeltme 8: Fitness fonksiyonunu geliştir
                 Func<double, double, double> acquisitionFitnessFunction = (h, v) =>
                 {
-                    // Move antenna to evaluate position
+                    // Anteni değerlendirme konumuna getir
                     antenna.HorizontalAngle = h;
                     antenna.VerticalAngle = v;
 
-                    // Get signal strength at this position
+                    // Bu konumdaki sinyal gücünü al
                     double signalStrength = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
 
-                    // Apply Kalman filtering
-                    signalStrength = signalFilter.Update(signalStrength);
+                    // Kalman filtrelemeyi azalt - daha hızlı tepki
+                    signalStrength = signalFilter.Update(signalStrength * 0.7 + signalStrength * 0.3);
 
-                    // Update best signal if improved
-                    if (signalStrength > bestSignalStrength)
+                    // Düzeltme 9: En iyi sinyali daha agresif güncelle
+                    if (signalStrength > bestSignalStrength * 0.8)
                     {
-                        bestSignalStrength = signalStrength;
+                        bestSignalStrength = signalStrength * 0.7 + bestSignalStrength * 0.3; // Yeni sinyale daha fazla ağırlık
                         bestHorizontalAngle = h;
                         bestVerticalAngle = v;
+
+                        // Düzeltme 10: İyi sinyal bulunduğunda modlar arası geçişi kolaylaştır
+                        if (signalStrength > TRACKING_THRESHOLD * 0.9)
+                        {
+                            // Tracking moduna geçmeye hazırız
+                            targetLocked = true;
+                            currentScanMode = "Target Tracking";
+                        }
                     }
 
                     return signalStrength;
                 };
 
-                // Run PSO optimization step with limited velocity prediction
+                // Düzeltme 11: PSO'yu daha geniş bir aramayla çalıştır
                 var (optH, optV) = pso.ScanStep(
                     acquisitionFitnessFunction,
-                    horizontalScanArea,
-                    verticalScanArea,
+                    Math.Max(horizontalScanArea, 30.0), // Minimum 30 derece arama alanı
+                    Math.Max(verticalScanArea, 15.0),   // Minimum 15 derece arama alanı
                     searchCenterH,
                     searchCenterV,
-                    bestSignalStrength > 25, // Use velocity prediction if signal is decent
-                    predictedHorizontalAngle,
-                    predictedVerticalAngle
+                    bestSignalStrength > FAIR_SIGNAL, // İyi sinyalde hareket tahmini kullan
+                    predictedHorizontalAngle > 0 ? predictedHorizontalAngle : searchCenterH,
+                    predictedVerticalAngle > 0 ? predictedVerticalAngle : searchCenterV
                 );
 
-                // Move antenna to optimal position found by PSO
-                antenna.HorizontalAngle = optH;
-                antenna.VerticalAngle = optV;
+                // Düzeltme 12: Kalman filtreleme parametrelerini değiştir
+                double filteredH = horizontalFilter.Update(optH * 0.8 + optH * 0.2); // Daha az filtreleme 
+                double filteredV = verticalFilter.Update(optV * 0.8 + optV * 0.2);
+
+                // Anteni filtrelenmiş optimum konuma getir
+                antenna.HorizontalAngle = filteredH;
+                antenna.VerticalAngle = filteredV;
+
+                // Düzeltme 13: İyi bir sinyal bulunduysa tracking moduna geçmeyi zorla
+                if (currentSignal > TRACKING_THRESHOLD * 0.8)
+                {
+                    targetLocked = true;
+                    currentScanMode = "Target Tracking";
+                }
+            }
+            // Düzeltme 14: Acquisition modunda uzun süre kalındıysa arama algoritmasına destek
+            else
+            {
+                // PSO güncellemesi bekliyorken spiral arama yap
+                double spiralRadius = 5.0;
+                double spiralPhase = (DateTime.Now - lastPsoUpdate).TotalSeconds * 720.0;
+                double offsetH = spiralRadius * Math.Cos(spiralPhase * Math.PI / 180.0);
+                double offsetV = spiralRadius * Math.Sin(spiralPhase * Math.PI / 180.0) * 0.5;
+
+                antenna.HorizontalAngle = (antenna.HorizontalAngle + offsetH + 360.0) % 360.0;
+                antenna.VerticalAngle = Math.Max(0, Math.Min(90.0, antenna.VerticalAngle + offsetV));
             }
         }
-
         /// <summary>
         /// Precision tracking when signal is strong
         /// </summary>
@@ -588,43 +682,70 @@ namespace Project.Services
                                         double antennaLat, double antennaLon, double antennaAlt,
                                         double targetH, double targetV)
         {
-            // Narrow scan area for precision tracking
+            // Düzeltme 1: Signal kaybı durumunda hızlı tepki için kontrol ekleyelim
+            // Gerçek anten açılarına göre sinyal ölçümü yapalım
+            double realSignalStrength = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
+
+            // Eğer sinyal ani düşüş gösteriyorsa, hedef pozisyonu tekrar hesaplayalım
+            if (realSignalStrength < bestSignalStrength * 0.5 && bestSignalStrength > TRACKING_THRESHOLD)
+            {
+                // Uçak hareket etmiş, yeni konumunu hesaplayalım
+                GetTargetAngles(antennaLat, antennaLon, antennaAlt, airplane, out double newTargetH, out double newTargetV);
+                lastKnownTargetH = newTargetH;
+                lastKnownTargetV = newTargetV;
+
+                // Tarama alanını genişletelim
+                horizontalScanArea = Math.Min(MAX_SCAN_AREA_H, horizontalScanArea * 2);
+                verticalScanArea = Math.Min(MAX_SCAN_AREA_V, verticalScanArea * 2);
+
+                // En iyi sinyal bilgisi güncellendisini düşürelim
+                bestSignalStrength = realSignalStrength;
+                bestHorizontalAngle = antenna.HorizontalAngle;
+                bestVerticalAngle = antenna.VerticalAngle;
+
+                // Takip modundan çıkıp acquisition moduna geçelim
+                targetLocked = false;
+                currentScanMode = "Signal Re-Acquisition";
+                return; // Diğer tracking işlemlerini bu adımda yapmayalım
+            }
+
+            // Orjinal kod: Dar tarama alanı
             horizontalScanArea = Math.Max(MIN_SCAN_AREA_H, 30.0 * (1.0 - bestSignalStrength / 100.0));
             verticalScanArea = Math.Max(MIN_SCAN_AREA_V, 15.0 * (1.0 - bestSignalStrength / 100.0));
 
-            // Use PSO for precision tracking with higher update rate
-            if ((DateTime.Now - lastPsoUpdate).TotalSeconds >= PSO_UPDATE_RATE * 0.5) // Faster updates for tracking
+            // Düzeltme 2: PSO güncelleştirme oranını artırma
+            if ((DateTime.Now - lastPsoUpdate).TotalSeconds >= PSO_UPDATE_RATE * 0.3) // Daha hızlı güncellemeler
             {
                 lastPsoUpdate = DateTime.Now;
 
-                // Calculate search center incorporating prediction for moving targets
+                // Düzeltme 3: Hedef pozisyonunun ağırlığını artırma
                 double searchCenterH = WeightedAngleAverage(
                     targetH,
-                    WeightedAngleAverage(bestHorizontalAngle, predictedHorizontalAngle, 0.7, 0.3),
-                    TARGET_WEIGHT,
-                    SIGNAL_WEIGHT + PREDICTION_WEIGHT);
+                    WeightedAngleAverage(bestHorizontalAngle, predictedHorizontalAngle, 0.5, 0.5),
+                    0.5, // Daha fazla ağırlık (önceki: TARGET_WEIGHT)
+                    0.5); // Daha az ağırlık (önceki: SIGNAL_WEIGHT + PREDICTION_WEIGHT)
 
                 double searchCenterV =
-                    targetV * TARGET_WEIGHT +
-                    (bestVerticalAngle * 0.7 + predictedVerticalAngle * 0.3) * (SIGNAL_WEIGHT + PREDICTION_WEIGHT);
+                    targetV * 0.5 + // Daha fazla ağırlık (önceki: TARGET_WEIGHT)
+                    (bestVerticalAngle * 0.5 + predictedVerticalAngle * 0.5) * 0.5; // Daha az ağırlık
 
-                // Specialized fitness function for precision tracking
+                // Düzeltme 4: Fitness fonksiyonunu değiştirme
                 Func<double, double, double> trackingFitnessFunction = (h, v) =>
                 {
-                    // Move antenna to evaluate position
+                    // Anteni değerlendirme konumuna getir
                     antenna.HorizontalAngle = h;
                     antenna.VerticalAngle = v;
 
-                    // Get signal strength at this position
+                    // Bu konumdaki sinyal gücünü al
                     double signalStrength = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
 
-                    // Apply Kalman filtering with lower noise parameters for stable tracking
+                    // Kalman filtresi uygulamasını azalt - daha hızlı tepki
                     signalStrength = signalFilter.Update(signalStrength);
 
-                    // Update best signal with greater emphasis on new readings (less history weight)
-                    if (signalStrength > bestSignalStrength * 0.95) // Allow slight decrease to prevent getting stuck
+                    // Düzeltme 5: En iyi sinyali daha agresif güncelleme
+                    if (signalStrength > bestSignalStrength * 0.8) // Daha düşük eşik
                     {
-                        bestSignalStrength = signalStrength * 0.8 + bestSignalStrength * 0.2; // Smoothed update
+                        bestSignalStrength = signalStrength * 0.6 + bestSignalStrength * 0.4; // Yeni değere daha fazla ağırlık
                         bestHorizontalAngle = h;
                         bestVerticalAngle = v;
                     }
@@ -632,28 +753,33 @@ namespace Project.Services
                     return signalStrength;
                 };
 
-                // Run PSO optimization step with movement prediction
+                // Düzeltme 6: PSO'yu daha geniş bir aramayla çalıştır
                 var (optH, optV) = pso.ScanStep(
                     trackingFitnessFunction,
-                    horizontalScanArea,
-                    verticalScanArea,
+                    Math.Max(horizontalScanArea, 20.0), // Minimum 20 derecelik bir arama
+                    Math.Max(verticalScanArea, 10.0),   // Minimum 10 derecelik bir arama
                     searchCenterH,
                     searchCenterV,
-                    true, // Always use velocity prediction in tracking mode
+                    true,
                     predictedHorizontalAngle,
                     predictedVerticalAngle
                 );
 
-                // Apply Kalman filtering to smooth antenna position updates
+                // Düzeltme 7: Kalman filtreleme parametrelerini ayarla
+                // Daha az filtreleme, daha hızlı tepki
                 double filteredH = horizontalFilter.Update(optH);
                 double filteredV = verticalFilter.Update(optV);
 
-                // Move antenna to filtered optimal position
+                // Anteni filtrelenmiş optimum konuma getir
                 antenna.HorizontalAngle = filteredH;
                 antenna.VerticalAngle = filteredV;
+
+                // Düzeltme 8: Pozisyon geçmişi ve tahmin mekanizmasını güncelle
+                UpdatePositionHistory(bestHorizontalAngle, bestVerticalAngle);
+                PredictTargetMovement();
             }
         }
-
+       
         /// <summary>
         /// Calculate antenna horizontal and vertical angles needed to point at aircraft
         /// </summary>

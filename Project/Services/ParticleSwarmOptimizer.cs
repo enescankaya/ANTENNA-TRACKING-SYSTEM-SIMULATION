@@ -390,6 +390,37 @@ namespace Project.Services
             SearchRadius = 180.0;
         }
 
+        public void PartialReset()
+        {
+            // Reset half of the particles randomly
+            for (int i = 0; i < particles.Count / 2; i++)
+            {
+                int index = random.Next(particles.Count);
+                var particle = particles[index];
+
+                // Reset positions with random values
+                particle.HorizontalPosition = random.NextDouble() * 360.0;
+                particle.VerticalPosition = random.NextDouble() * 90.0;
+
+                // Reset velocities with controlled random values
+                particle.HorizontalVelocity = (random.NextDouble() * 2 - 1) * maxVelocityH * 0.5;
+                particle.VerticalVelocity = (random.NextDouble() * 2 - 1) * maxVelocityV * 0.5;
+
+                // Reset personal best
+                particle.BestHorizontalPosition = particle.HorizontalPosition;
+                particle.BestVerticalPosition = particle.VerticalPosition;
+                particle.BestFitness = double.MinValue;
+            }
+
+            // Reset optimization parameters
+            currentInertia = INERTIA_START;
+            ConvergenceRate = 0;
+            iteration = 0;
+            stagnationCount = 0;
+            explorationFactor = 1.0;
+            SearchRadius = 180.0;
+        }
+
         /// <summary>
         /// Generates a random number from a standard normal distribution using Box-Muller transform
         /// </summary>
