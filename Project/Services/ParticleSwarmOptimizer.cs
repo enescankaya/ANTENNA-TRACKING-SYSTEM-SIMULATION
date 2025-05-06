@@ -16,15 +16,15 @@ namespace Project.Services
         private double bestFitness;
 
         // PSO parameters optimized for antenna tracking
-        private const double INERTIA_START = 0.9;
-        private const double INERTIA_END = 0.3;  // Lower end inertia for better fine-tuning
-        private const double COGNITIVE = 2.0;    // Weight for particle's own best
-        private const double SOCIAL = 2.5;       // Weight for global best (higher for faster convergence)
-        private const int MAX_ITERATIONS = 100;
+        private const double INERTIA_START = 0.95;  // Higher initial inertia for better exploration
+        private const double INERTIA_END = 0.2;     // Lower end inertia for better fine-tuning
+        private const double COGNITIVE = 1.8;        // Reduced to prevent overshooting
+        private const double SOCIAL = 2.2;          // Increased for better convergence
+        private const int MAX_ITERATIONS = 50;      // Reduced for faster adaptation
 
-        // Dynamic velocity limits
-        private double maxVelocityH = 20.0;
-        private double maxVelocityV = 10.0;
+        // Dynamic velocity limits with better defaults
+        private double maxVelocityH = 15.0;        // Reduced for smoother movement
+        private double maxVelocityV = 7.5;         // Half of horizontal for stability
 
         // Current state
         private int iteration;
@@ -33,15 +33,15 @@ namespace Project.Services
         private int stagnationCount;
         private const int STAGNATION_THRESHOLD = 5;
 
-        // Exploration vs exploitation balance
+        // Improved exploration vs exploitation balance
         private double explorationFactor = 1.0;
-        private const double EXPLORATION_DECAY = 0.95;
+        private const double EXPLORATION_DECAY = 0.98;  // Slower decay
 
-        // Signal strength thresholds for adaptive behavior
-        private const double EXCELLENT_SIGNAL = 80.0;
-        private const double GOOD_SIGNAL = 60.0;
-        private const double FAIR_SIGNAL = 40.0;
-        private const double POOR_SIGNAL = 20.0;
+        // Signal strength thresholds adjusted for realism
+        private const double EXCELLENT_SIGNAL = 70.0;  // More realistic threshold
+        private const double GOOD_SIGNAL = 50.0;
+        private const double FAIR_SIGNAL = 30.0;
+        private const double POOR_SIGNAL = 10.0;
 
         // Tracking optimization
         private double searchCenterH = 0.0;
@@ -135,16 +135,22 @@ namespace Project.Services
         {
             iteration++;
 
-            // Hedef etrafında parçacıkları konumlandır
+            // Adaptive inertia weight based on iteration and signal quality
+            currentInertia = INERTIA_START - (INERTIA_START - INERTIA_END) *
+                            (iteration / (double)MAX_ITERATIONS);
+
+            // Dynamic search area adaptation
+            explorationFactor *= EXPLORATION_DECAY;
+            double effectiveSearchAreaH = searchAreaH * explorationFactor;
+            double effectiveSearchAreaV = searchAreaV * explorationFactor;
+
+            // Update particles with improved positioning
             foreach (var particle in particles)
             {
-                if (iteration == 1 || random.NextDouble() < 0.1) // %10 şans ile rastgele konum
+                if (iteration == 1 || random.NextDouble() < 0.05) // Reduced random repositioning
                 {
-                    double offsetH = (random.NextDouble() - 0.5) * searchAreaH;
-                    double offsetV = (random.NextDouble() - 0.5) * searchAreaV;
-
-                    particle.HorizontalPosition = (targetH + offsetH + 360.0) % 360.0;
-                    particle.VerticalPosition = Math.Max(0, Math.Min(90, targetV + offsetV));
+                    RepositionParticle(particle, targetH, targetV, effectiveSearchAreaH,
+                                     effectiveSearchAreaV, predictedH, predictedV);
                 }
 
                 // Fitness değerlendir
@@ -187,7 +193,69 @@ namespace Project.Services
                 particle.VerticalPosition = Math.Max(0, Math.Min(90.0, particle.VerticalPosition + particle.VerticalVelocity));
             }
 
+            // Calculate convergence metrics
+            CalculateConvergenceMetrics();
+
             return (bestHorizontalAngle, bestVerticalAngle);
+        }
+
+        private void CalculateConvergenceMetrics()
+        {
+            // Calculate fitness improvement rate
+            double fitnessImprovement = bestFitness - prevBestFitness;
+            prevBestFitness = bestFitness;
+
+            // Update stagnation counter
+            if (Math.Abs(fitnessImprovement) < 0.001)
+            {
+                stagnationCount++;
+                if (stagnationCount > STAGNATION_THRESHOLD)
+                {
+                    // Reset exploration factor to escape local optima
+                    explorationFactor = Math.Min(1.0, explorationFactor * 1.5);
+                }
+            }
+            else
+            {
+                stagnationCount = 0;
+            }
+
+            // Calculate particle distribution
+            CalculateSearchRadius();
+
+            // Calculate overall convergence rate (0-1)
+            double iterationProgress = Math.Min(1.0, iteration / (double)MAX_ITERATIONS);
+            double fitnessProgress = Math.Min(1.0, bestFitness / 100.0);
+            double distributionFactor = Math.Min(1.0, SearchRadius / 180.0);
+
+            ConvergenceRate = (fitnessProgress * 0.5 +
+                             (1.0 - distributionFactor) * 0.3 +
+                             iterationProgress * 0.2);
+        }
+
+        private void RepositionParticle(Particle2D particle, double targetH, double targetV,
+                                      double searchAreaH, double searchAreaV,
+                                      double predictedH, double predictedV)
+        {
+            // Use predicted position if available
+            double centerH = predictedH >= 0 ? predictedH : targetH;
+            double centerV = predictedV >= 0 ? predictedV : targetV;
+
+            // Adaptive standard deviation based on exploration factor
+            double stdDevH = searchAreaH * 0.25 * explorationFactor;
+            double stdDevV = searchAreaV * 0.25 * explorationFactor;
+
+            // Calculate random offset using Gaussian distribution
+            double offsetH = NextGaussian() * stdDevH;
+            double offsetV = NextGaussian() * stdDevV;
+
+            // Position particle with wrap-around for horizontal angle
+            particle.HorizontalPosition = (centerH + offsetH + 360.0) % 360.0;
+            particle.VerticalPosition = Math.Max(0, Math.Min(90, centerV + offsetV));
+
+            // Reset velocities with smaller initial values
+            particle.HorizontalVelocity = (random.NextDouble() - 0.5) * maxVelocityH * 0.2;
+            particle.VerticalVelocity = (random.NextDouble() - 0.5) * maxVelocityV * 0.2;
         }
 
         private void CalculateSearchRadius()
@@ -331,6 +399,23 @@ namespace Project.Services
             historicalBests.Clear();
             ConvergenceRate = 0;
             SearchRadius = 180.0;
+        }
+
+        /// <summary>
+        /// Generates a random number from a standard normal distribution using Box-Muller transform
+        /// </summary>
+        private double NextGaussian()
+        {
+            double u1, u2;
+            do
+            {
+                u1 = 2.0 * random.NextDouble() - 1.0;
+                u2 = 2.0 * random.NextDouble() - 1.0;
+            }
+            while (u1 * u1 + u2 * u2 >= 1.0 || u1 * u1 + u2 * u2 == 0.0);
+
+            double multiplier = Math.Sqrt(-2.0 * Math.Log(u1 * u1 + u2 * u2) / (u1 * u1 + u2 * u2));
+            return u1 * multiplier;
         }
 
         /// <summary>

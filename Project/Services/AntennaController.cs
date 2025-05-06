@@ -46,6 +46,11 @@ namespace Project.Services
         private const int GRID_STEPS_H = 36; // 10-degree horizontal steps
         private const int GRID_STEPS_V = 18; // 5-degree vertical steps
 
+        // Initial scan grid for 360x90 coverage
+        private List<(double h, double v)> initialScanGrid = new List<(double h, double v)>();
+        private int initialScanIndex = 0;
+        private const int INITIAL_SCAN_POINTS = 400; // ~20x20 grid, adjust for density
+
         // Update rate variables - Güncelleme hızını yavaşlat
         private DateTime lastScanUpdate = DateTime.MinValue;
         private const double SCAN_UPDATE_RATE = 0.05;  // 20Hz'e düşür
@@ -178,59 +183,85 @@ namespace Project.Services
         private void PerformInitialScan(AntennaState antenna, AirplaneState airplane,
                                       double antennaLat, double antennaLon, double antennaAlt)
         {
-            if (scanStartTime == default)
+            // Generate scan grid if not already done or scan is restarting
+            if (scanStartTime == default || initialScanGrid.Count == 0)
             {
                 scanStartTime = DateTime.Now;
-                currentGridStepH = 0;
-                currentGridStepV = 0;
+                initialScanIndex = 0;
                 bestSignalStrength = 0;
-                bestHorizontalAngle = 0;  // Sıfırla
-                bestVerticalAngle = 0;    // Sıfırla
+                bestHorizontalAngle = 0;
+                bestVerticalAngle = 0;
                 horizontalScanArea = MAX_SCAN_AREA_H;
                 verticalScanArea = MAX_SCAN_AREA_V;
+                GenerateInitialScanGrid();
             }
 
+            // Progress through the scan grid based on elapsed time
             double elapsed = (DateTime.Now - scanStartTime).TotalSeconds;
-            double totalPoints = GRID_STEPS_H * GRID_STEPS_V;
             double scanProgress = Math.Min(1.0, elapsed / INITIAL_SCAN_DURATION);
-            int currentPoint = (int)(scanProgress * totalPoints);
+            int targetIndex = (int)(scanProgress * initialScanGrid.Count);
 
-            // Daha sistematik grid tarama
-            currentGridStepH = currentPoint % GRID_STEPS_H;
-            currentGridStepV = (currentPoint / GRID_STEPS_H) % GRID_STEPS_V;
+            // Clamp index to grid size
+            if (targetIndex >= initialScanGrid.Count)
+                targetIndex = initialScanGrid.Count - 1;
 
-            // Grid pozisyonunu hesapla
-            double horizontalStep = MAX_SCAN_AREA_H / GRID_STEPS_H;
-            double verticalStep = MAX_SCAN_AREA_V / GRID_STEPS_V;
+            // Only advance if not already at this index
+            if (initialScanIndex < targetIndex)
+                initialScanIndex = targetIndex;
 
-            double targetHorizontalAngle = (currentGridStepH * horizontalStep) % 360.0;
-            double targetVerticalAngle = currentGridStepV * verticalStep;
+            // Get current scan point
+            var (targetHorizontalAngle, targetVerticalAngle) = initialScanGrid[initialScanIndex];
 
-            // Antenin hareketini yumuşat
+            // Smooth antenna movement
             antenna.HorizontalAngle = horizontalFilter.Update(targetHorizontalAngle);
             antenna.VerticalAngle = verticalFilter.Update(targetVerticalAngle);
 
-            // Sinyal gücünü ölç ve filtrele
+            // Measure and filter signal strength
             double signal = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
             signal = signalFilter.Update(signal);
             antenna.SignalStrength = signal;
 
-            // En iyi sinyali güncelle
+            // Update best signal
             if (signal > bestSignalStrength)
             {
                 bestSignalStrength = signal;
                 bestHorizontalAngle = antenna.HorizontalAngle;
                 bestVerticalAngle = antenna.VerticalAngle;
-                Console.WriteLine($"New best signal: {signal:F1} at H:{bestHorizontalAngle:F1}° V:{bestVerticalAngle:F1}°");
             }
 
-            // Taramayı bitir
-            if (currentPoint >= totalPoints || signal > TRACKING_THRESHOLD * 1.2)
+            // End scan if complete or strong signal found
+            if (initialScanIndex >= initialScanGrid.Count - 1 || signal > TRACKING_THRESHOLD * 1.2)
             {
                 isInitialScan = false;
                 pso.Reset();
                 horizontalScanArea = Math.Max(MIN_SCAN_AREA_H, 90.0);
-                Console.WriteLine($"Initial scan complete. Best signal: {bestSignalStrength:F1} at H:{bestHorizontalAngle:F1}° V:{bestVerticalAngle:F1}°");
+                verticalScanArea = Math.Max(MIN_SCAN_AREA_V, 45.0);
+            }
+        }
+
+        /// <summary>
+        /// Generates a uniform spiral grid covering 360x90 degrees for the initial scan.
+        /// </summary>
+        private void GenerateInitialScanGrid()
+        {
+            initialScanGrid.Clear();
+            // Fibonacci sphere for even distribution
+            int n = INITIAL_SCAN_POINTS;
+            double goldenAngle = Math.PI * (3 - Math.Sqrt(5));
+            for (int i = 0; i < n; i++)
+            {
+                double y = 1 - (i / (double)(n - 1)) * 2; // y from 1 to -1
+                double radius = Math.Sqrt(1 - y * y);
+                double theta = goldenAngle * i;
+                double x = Math.Cos(theta) * radius;
+                double z = Math.Sin(theta) * radius;
+
+                // Convert to spherical coordinates
+                double h = (Math.Atan2(z, x) * 180.0 / Math.PI + 360.0) % 360.0;
+                double v = Math.Acos(y) * 180.0 / Math.PI; // 0 (up) to 180 (down)
+                v = Math.Min(90.0, v); // Clamp to 0-90 for hemisphere
+
+                initialScanGrid.Add((h, v));
             }
         }
 
