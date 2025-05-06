@@ -314,9 +314,10 @@ namespace Project
                 Line scanningLine = MapCanvas.Children.OfType<Line>().FirstOrDefault(l => l.Stroke == Brushes.Blue);
                 if (scanningLine != null && scanningAntenna != null)
                 {
-                    double scanAngleRad = scanningAntenna.HorizontalAngle * Math.PI / 180;
+                    // 90 derece farkı düzeltmek için açıdan 90 çıkarıyoruz
+                    double scanAngleRad = (scanningAntenna.HorizontalAngle - 90) * Math.PI / 180;
                     double scanV = scanningAntenna.VerticalAngle;
-                    double length = 100 + 20 * (scanV / 90.0); // Kısa ve kalın
+                    double length = 100 + 20 * (scanV / 90.0);
                     scanningLine.X1 = antennaPoint.X;
                     scanningLine.Y1 = antennaPoint.Y;
                     scanningLine.X2 = antennaPoint.X + length * Math.Cos(scanAngleRad);
@@ -338,9 +339,10 @@ namespace Project
                 Line directionalLine = MapCanvas.Children.OfType<Line>().FirstOrDefault(l => l.Stroke == Brushes.Green);
                 if (directionalLine != null && directionalAntenna != null)
                 {
-                    double dirAngleRad = directionalAntenna.HorizontalAngle * Math.PI / 180;
+                    // 90 derece farkı düzeltmek için açıdan 90 çıkarıyoruz
+                    double dirAngleRad = (directionalAntenna.HorizontalAngle - 90) * Math.PI / 180;
                     double dirV = directionalAntenna.VerticalAngle;
-                    double length = 160 + 40 * (dirV / 90.0); // Uzun ve ince
+                    double length = 160 + 40 * (dirV / 90.0);
                     directionalLine.X1 = antennaPoint.X;
                     directionalLine.Y1 = antennaPoint.Y;
                     directionalLine.X2 = antennaPoint.X + length * Math.Cos(dirAngleRad);
