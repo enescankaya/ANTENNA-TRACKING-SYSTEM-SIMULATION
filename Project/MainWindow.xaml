@@ -734,6 +734,55 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Aircraft Position Panel - NEW -->
+                    <Border Style="{StaticResource ModernPanelStyle}" 
+                            Margin="0,0,0,10" 
+                            Padding="15">
+                        <StackPanel>
+                            <TextBlock Text="AIRCRAFT POSITION" 
+                                     FontSize="12" 
+                                     FontWeight="SemiBold"
+                                     Foreground="#FFFF6000"/>
+
+                            <!-- Angles Display -->
+                            <UniformGrid Columns="2" Margin="0,15,0,0">
+                                <!-- Horizontal Angle -->
+                                <Border Background="#FF262626" 
+                                        CornerRadius="4" 
+                                        Margin="0,0,5,0" 
+                                        Padding="10">
+                                    <StackPanel>
+                                        <TextBlock Text="Horizontal" 
+                                                 Foreground="#FF808080"
+                                                 FontSize="11"/>
+                                        <TextBlock x:Name="AircraftHAngle" 
+                                                 Text="0°" 
+                                                 FontSize="20"
+                                                 FontWeight="SemiBold"
+                                                 Foreground="#FFFF6000"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Vertical Angle -->
+                                <Border Background="#FF262626" 
+                                        CornerRadius="4" 
+                                        Margin="5,0,0,0" 
+                                        Padding="10">
+                                    <StackPanel>
+                                        <TextBlock Text="Vertical" 
+                                                 Foreground="#FF808080"
+                                                 FontSize="11"/>
+                                        <TextBlock x:Name="AircraftVAngle" 
+                                                 Text="0°" 
+                                                 FontSize="20"
+                                                 FontWeight="SemiBold"
+                                                 Foreground="#FFFF6000"/>
+                                    </StackPanel>
+                                </Border>
+                            </UniformGrid>
+                        </StackPanel>
+                    </Border>
+
                     <!-- Control Buttons -->
                     <Border Style="{StaticResource ModernPanelStyle}" 
                             Margin="0,0,0,10" 
@@ -759,7 +808,7 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- System Status -->
+                    <!-- Enhanced System Status -->
                     <Border Style="{StaticResource ModernPanelStyle}" 
                             Padding="15">
                         <StackPanel>
@@ -773,14 +822,54 @@
                                     Padding="10" 
                                     Margin="0,10,0,0">
                                 <StackPanel>
+                                    <!-- Main Status -->
                                     <TextBlock x:Name="SystemStatus" 
                                              Text="System Initialized"
-                                             Foreground="#FFFFA500"/>
+                                             Foreground="#FFFFA500"
+                                             TextWrapping="Wrap"/>
 
                                     <TextBlock x:Name="StatusMessage" 
                                              Text="Ready"
                                              Foreground="#FF808080"
+                                             TextWrapping="Wrap"
                                              Margin="0,5,0,0"/>
+
+                                    <!-- Detailed System Info - Metinleri kısalttık -->
+                                    <Border BorderBrush="#FF3D3D3D" 
+                                            BorderThickness="0,1,0,0" 
+                                            Margin="0,10">
+                                        <StackPanel Margin="0,10,0,0">
+                                            <TextBlock x:Name="ScanMode" 
+                                                     Text="Mode: Initial Scan"
+                                                     Foreground="#FFA0A0A0"
+                                                     TextTrimming="CharacterEllipsis"/>
+
+                                            <TextBlock x:Name="ScanProgress" 
+                                                     Text="Progress: 0%"
+                                                     Foreground="#FFA0A0A0"
+                                                     Margin="0,5,0,0"/>
+
+                                            <TextBlock x:Name="PsoInfo" 
+                                                     Text="PSO: 0"
+                                                     Foreground="#FFA0A0A0"
+                                                     Margin="0,5,0,0"/>
+
+                                            <TextBlock x:Name="ConvergenceInfo" 
+                                                     Text="Conv: 0%"
+                                                     Foreground="#FFA0A0A0"
+                                                     Margin="0,5,0,0"/>
+
+                                            <TextBlock x:Name="SearchAreaInfo" 
+                                                     Text="Area: 360°"
+                                                     Foreground="#FFA0A0A0"
+                                                     Margin="0,5,0,0"/>
+
+                                            <TextBlock x:Name="TargetLockInfo" 
+                                                     Text="Lock: No"
+                                                     Foreground="#FFA0A0A0"
+                                                     Margin="0,5,0,0"/>
+                                        </StackPanel>
+                                    </Border>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

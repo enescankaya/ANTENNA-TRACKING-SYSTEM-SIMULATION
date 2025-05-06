@@ -428,7 +428,7 @@ namespace Project
             UpdateAntennaDisplay();
         }
 
-        private void SitlConnection_OnPositionUpdate(object sender, AirplaneState e)
+        private async void SitlConnection_OnPositionUpdate(object sender, AirplaneState e)
         {
             if (e == null) return;
 
@@ -441,16 +441,32 @@ namespace Project
                 currentBattery = e.Battery;
                 currentThrottle = e.Throttle;
 
-                if (!isScanning) return;
+                // Calculate angles from antenna to aircraft
+                double targetAngleH = CalculateHorizontalAngle(
+                    antennaPosition.Lat,
+                    antennaPosition.Lng,
+                    e.Latitude,
+                    e.Longitude
+                );
 
-                // UI güncellemelerini tek bir Dispatcher çağrısında topla
-                Dispatcher.InvokeAsync(() =>
+                double targetAngleV = CalculateVerticalAngle(
+                    antennaPosition.Lat,
+                    antennaPosition.Lng,
+                    0,
+                    e.Latitude,
+                    e.Longitude,
+                    e.Altitude
+                );
+
+                await Dispatcher.InvokeAsync(() =>
                 {
                     try
                     {
-                        UpdateAntennaDisplay();
-                        UpdateMap();
-                        UpdateHUD(currentHeading, currentAltitude, currentSpeed, currentBattery, currentThrottle);
+                        // Update aircraft position angles relative to antenna
+                        AircraftHAngle.Text = $"{targetAngleH:F1}°";
+                        AircraftVAngle.Text = $"{targetAngleV:F1}°";
+
+                        // ...rest of the UI updates...
                     }
                     catch (Exception ex)
                     {
@@ -462,6 +478,35 @@ namespace Project
             {
                 System.Diagnostics.Debug.WriteLine($"Position update error: {ex.Message}");
             }
+        }
+
+        private double CalculateHorizontalAngle(double lat1, double lon1, double lat2, double lon2)
+        {
+            double dLon = (lon2 - lon1) * Math.PI / 180.0;
+            double y = Math.Sin(dLon) * Math.Cos(lat2 * Math.PI / 180.0);
+            double x = Math.Cos(lat1 * Math.PI / 180.0) * Math.Sin(lat2 * Math.PI / 180.0) -
+                      Math.Sin(lat1 * Math.PI / 180.0) * Math.Cos(lat2 * Math.PI / 180.0) * Math.Cos(dLon);
+            double angle = Math.Atan2(y, x) * 180.0 / Math.PI;
+            return (angle + 360) % 360;
+        }
+
+        private double CalculateVerticalAngle(double lat1, double lon1, double alt1,
+                                            double lat2, double lon2, double alt2)
+        {
+            double R = 6371000; // Earth radius in meters
+            double dLat = (lat2 - lat1) * Math.PI / 180.0;
+            double dLon = (lon2 - lon1) * Math.PI / 180.0;
+
+            // Calculate great circle distance
+            double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                       Math.Cos(lat1 * Math.PI / 180.0) * Math.Cos(lat2 * Math.PI / 180.0) *
+                       Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+            double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+            double distance = R * c;
+
+            // Calculate vertical angle
+            double heightDiff = alt2 - alt1;
+            return Math.Atan2(heightDiff, distance) * 180.0 / Math.PI;
         }
 
         private void SitlConnection_OnConnectionStatusChanged(object sender, string status)
@@ -1024,6 +1069,14 @@ namespace Project
                 UpdateCompassRose(heading);
                 UpdateSpeedTape(speed);
                 UpdateAltitudeTape(altitude);
+
+                // System Status updates
+                ScanMode.Text = $"Mode: {antennaController?.CurrentMode ?? "N/A"}";
+                ScanProgress.Text = $"Progress: {(antennaController?.ScanProgress * 100):F0}%";
+                PsoInfo.Text = $"PSO Iterations: {antennaController?.PsoIteration ?? 0}";
+                ConvergenceInfo.Text = $"Conv: {(antennaController?.ConvergenceRate * 100):F0}%";
+                SearchAreaInfo.Text = $"Area: {(antennaController?.CurrentScanArea ?? 360):F0}°";
+                TargetLockInfo.Text = $"Lock: {(antennaController?.IsTargetLocked ?? false ? "Yes" : "No")}";
             }
             catch (Exception ex)
             {
