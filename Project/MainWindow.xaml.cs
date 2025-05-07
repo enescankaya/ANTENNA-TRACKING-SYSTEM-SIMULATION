@@ -422,13 +422,6 @@ namespace Project
 
         private void ResetButton_Click(object sender, RoutedEventArgs e)
         {
-            // Mevcut bileşenleri temizle
-            MapCanvas.Children.Clear();
-            RadarElementsCanvas.Children.Clear();
-
-            // Görsel bileşenleri yeniden başlat
-            InitializeVisuals();
-
             // Anten kontrolcüsünü sıfırla
             antennaController.Reset();
             scanningAntenna = new AntennaState();
@@ -436,20 +429,77 @@ namespace Project
 
             // UI göstergelerini sıfırla
             UpdateAntennaDisplay();
-            UpdateMap();
             UpdateRadarPosition();
 
             // HUD'u sıfırla
             UpdateHUD(0, 0, 0, 100, 0);
 
+            // Çizgileri orijinal pozisyonlarına getir
+            if (antennaDirectionLine != null)
+            {
+                double centerX = RadarElementsCanvas.ActualWidth / 2;
+                double centerY = RadarElementsCanvas.ActualHeight / 2;
+                antennaDirectionLine.X1 = centerX;
+                antennaDirectionLine.Y1 = centerY;
+                antennaDirectionLine.X2 = centerX;
+                antennaDirectionLine.Y2 = centerY - 100; // Varsayılan uzunluk
+            }
+
+            // Map üzerindeki çizgileri sıfırla
+            var scanningLine = MapCanvas.Children.OfType<Line>().FirstOrDefault(l => l.Stroke == Brushes.Green);
+            var directionalLine = MapCanvas.Children.OfType<Line>().FirstOrDefault(l => l.Stroke == Brushes.Blue);
+            if (scanningLine != null)
+            {
+                scanningLine.X1 = MapCanvas.ActualWidth / 2;
+                scanningLine.Y1 = MapCanvas.ActualHeight / 2;
+                scanningLine.X2 = MapCanvas.ActualWidth / 2;
+                scanningLine.Y2 = MapCanvas.ActualHeight / 2 - 100;
+            }
+            if (directionalLine != null)
+            {
+                directionalLine.X1 = MapCanvas.ActualWidth / 2;
+                directionalLine.Y1 = MapCanvas.ActualHeight / 2;
+                directionalLine.X2 = MapCanvas.ActualWidth / 2;
+                directionalLine.Y2 = MapCanvas.ActualHeight / 2 - 160;
+            }
+
+            // Uçak marker'ını ve anten marker'ını merkeze getir
+            if (aircraftMarker != null)
+            {
+                Canvas.SetLeft(aircraftMarker, MapCanvas.ActualWidth / 2 - aircraftMarker.Width / 2);
+                Canvas.SetTop(aircraftMarker, MapCanvas.ActualHeight / 2 - aircraftMarker.Height / 2);
+            }
+            if (antennaMarker != null)
+            {
+                Canvas.SetLeft(antennaMarker, MapCanvas.ActualWidth / 2 - antennaMarker.Width / 2);
+                Canvas.SetTop(antennaMarker, MapCanvas.ActualHeight / 2 - antennaMarker.Height / 2);
+            }
+
+            // RadarGrid'i görünür yap ve merkeze konumlandır
+            if (RadarGrid != null)
+            {
+                RadarGrid.Visibility = Visibility.Visible;
+                Canvas.SetLeft(RadarGrid, MapCanvas.ActualWidth / 2 - 100);
+                Canvas.SetTop(RadarGrid, MapCanvas.ActualHeight / 2 - 100);
+            }
+
+            // Radar Background'u görünür yap ve merkeze konumlandır
+            if (RadarBackground != null)
+            {
+                RadarBackground.Visibility = Visibility.Visible;
+                Canvas.SetLeft(RadarBackground, MapCanvas.ActualWidth / 2 - RadarBackground.Width / 2);
+                Canvas.SetTop(RadarBackground, MapCanvas.ActualHeight / 2 - RadarBackground.Height / 2);
+            }
+
             // Radar ve kontrol panelini görünür yap
-            if (RadarBackground != null) RadarBackground.Visibility = Visibility.Visible;
-            if (RadarGrid != null) RadarGrid.Visibility = Visibility.Visible;
             if (ControlPanel != null) ControlPanel.Visibility = Visibility.Visible;
 
             // Sistem durumunu güncelle
             SystemStatus.Text = "System Reset";
             StatusMessage.Text = "Ready";
+
+            // Map'i güncelle
+            UpdateMap();
         }
 
         private async void SitlConnection_OnPositionUpdate(object sender, AirplaneState e)
