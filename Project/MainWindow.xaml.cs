@@ -162,18 +162,18 @@ namespace Project
             figure.Segments.Add(arcSegment);
             geometry.Figures.Add(figure);
 
-            // Tarama anteni (mavi)
+            // Tarama anteni (yeşil)
             Line scanningLine = new Line
             {
-                Stroke = Brushes.Blue,
+                Stroke = Brushes.Green,
                 StrokeThickness = 2,
                 StrokeDashArray = new DoubleCollection { 2, 2 }
             };
 
-            // Yönlenme anteni (yeşil)
+            // Yönlenme anteni (mavi)
             Line directionalLine = new Line
             {
-                Stroke = Brushes.Green,
+                Stroke = Brushes.Blue,
                 StrokeThickness = 2
             };
 
@@ -194,9 +194,9 @@ namespace Project
                 Orientation = Orientation.Horizontal
             };
 
-            legend.Children.Add(new Rectangle { Width = 15, Height = 2, Fill = Brushes.Blue, Margin = new Thickness(2) });
+            legend.Children.Add(new Rectangle { Width = 15, Height = 2, Fill = Brushes.Green, Margin = new Thickness(2) });
             legend.Children.Add(new TextBlock { Text = "Scan", Foreground = Brushes.White, Margin = new Thickness(2), FontSize = 10 });
-            legend.Children.Add(new Rectangle { Width = 15, Height = 2, Fill = Brushes.Green, Margin = new Thickness(8, 2, 2, 2) });
+            legend.Children.Add(new Rectangle { Width = 15, Height = 2, Fill = Brushes.Blue, Margin = new Thickness(8, 2, 2, 2) });
             legend.Children.Add(new TextBlock { Text = "Track", Foreground = Brushes.White, Margin = new Thickness(2), FontSize = 10 });
 
             legendBorder.Child = legend;
@@ -310,8 +310,8 @@ namespace Project
                     antennaDirectionLine.Y2 = planePoint.Y;
                 }
 
-                // Tarama anteni çizgisi (mavi) - PSO ile güncellenen açı
-                Line scanningLine = MapCanvas.Children.OfType<Line>().FirstOrDefault(l => l.Stroke == Brushes.Blue);
+                // Tarama anteni çizgisi (yeşil)
+                Line scanningLine = MapCanvas.Children.OfType<Line>().FirstOrDefault(l => l.Stroke == Brushes.Green);
                 if (scanningLine != null && scanningAntenna != null)
                 {
                     // 90 derece farkı düzeltmek için açıdan 90 çıkarıyoruz
@@ -324,19 +324,19 @@ namespace Project
                     scanningLine.Y2 = antennaPoint.Y + length * Math.Sin(scanAngleRad);
                     scanningLine.StrokeThickness = 4;
 
-                    // Uçta küçük mavi daire
+                    // Uçta küçük yeşil daire
                     Ellipse scanTip = MapCanvas.Children.OfType<Ellipse>().FirstOrDefault(e => e.Tag as string == "ScanTip");
                     if (scanTip == null)
                     {
-                        scanTip = new Ellipse { Width = 10, Height = 10, Fill = Brushes.Blue, Tag = "ScanTip" };
+                        scanTip = new Ellipse { Width = 10, Height = 10, Fill = Brushes.Green, Tag = "ScanTip" };
                         MapCanvas.Children.Add(scanTip);
                     }
                     Canvas.SetLeft(scanTip, scanningLine.X2 - 5);
                     Canvas.SetTop(scanTip, scanningLine.Y2 - 5);
                 }
 
-                // Yönlenme anteni çizgisi (yeşil)
-                Line directionalLine = MapCanvas.Children.OfType<Line>().FirstOrDefault(l => l.Stroke == Brushes.Green);
+                // Yönlenme anteni çizgisi (mavi)
+                Line directionalLine = MapCanvas.Children.OfType<Line>().FirstOrDefault(l => l.Stroke == Brushes.Blue);
                 if (directionalLine != null && directionalAntenna != null)
                 {
                     // 90 derece farkı düzeltmek için açıdan 90 çıkarıyoruz
@@ -349,11 +349,11 @@ namespace Project
                     directionalLine.Y2 = antennaPoint.Y + length * Math.Sin(dirAngleRad);
                     directionalLine.StrokeThickness = 2;
 
-                    // Uçta küçük yeşil daire
+                    // Uçta küçük mavi daire
                     Ellipse dirTip = MapCanvas.Children.OfType<Ellipse>().FirstOrDefault(e => e.Tag as string == "DirTip");
                     if (dirTip == null)
                     {
-                        dirTip = new Ellipse { Width = 10, Height = 10, Fill = Brushes.Green, Tag = "DirTip" };
+                        dirTip = new Ellipse { Width = 10, Height = 10, Fill = Brushes.Blue, Tag = "DirTip" };
                         MapCanvas.Children.Add(dirTip);
                     }
                     Canvas.SetLeft(dirTip, directionalLine.X2 - 5);
@@ -422,12 +422,34 @@ namespace Project
 
         private void ResetButton_Click(object sender, RoutedEventArgs e)
         {
+            // Mevcut bileşenleri temizle
             MapCanvas.Children.Clear();
+            RadarElementsCanvas.Children.Clear();
+
+            // Görsel bileşenleri yeniden başlat
             InitializeVisuals();
+
+            // Anten kontrolcüsünü sıfırla
             antennaController.Reset();
             scanningAntenna = new AntennaState();
             directionalAntenna = new AntennaState();
+
+            // UI göstergelerini sıfırla
             UpdateAntennaDisplay();
+            UpdateMap();
+            UpdateRadarPosition();
+
+            // HUD'u sıfırla
+            UpdateHUD(0, 0, 0, 100, 0);
+
+            // Radar ve kontrol panelini görünür yap
+            if (RadarBackground != null) RadarBackground.Visibility = Visibility.Visible;
+            if (RadarGrid != null) RadarGrid.Visibility = Visibility.Visible;
+            if (ControlPanel != null) ControlPanel.Visibility = Visibility.Visible;
+
+            // Sistem durumunu güncelle
+            SystemStatus.Text = "System Reset";
+            StatusMessage.Text = "Ready";
         }
 
         private async void SitlConnection_OnPositionUpdate(object sender, AirplaneState e)
