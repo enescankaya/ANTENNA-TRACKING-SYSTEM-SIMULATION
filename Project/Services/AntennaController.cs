@@ -13,7 +13,7 @@ namespace Project.Services
         private readonly KalmanFilter horizontalFilter;
         private readonly KalmanFilter verticalFilter;
         private readonly KalmanFilter signalFilter;
-        private readonly ParticleSwarmOptimizer pso;
+        private ParticleSwarmOptimizer pso;
 
         // Scan area parameters - değişkenleri güncelle
         private const double INITIAL_SCAN_AREA_H = 360.0;
@@ -95,6 +95,18 @@ namespace Project.Services
         private double explorationAngle = 0;
         private double explorationAngleStep = 10.0; // Her adımda 10 derece kaydır
 
+        // PSO reset parameters
+        private const int MAX_PSO_ITERATIONS = 50;
+        private const int PARTICLE_COUNT = 30;
+        private DateTime lastPsoReset = DateTime.MinValue;
+        private const double PSO_RESET_INTERVAL = 2.0; // 2 seconds
+
+        // Signal strength calculation parameters
+        private const double MAX_RSSI = -40.0;  // dBm, very close to transmitter
+        private const double MIN_RSSI = -120.0; // dBm, at maximum range
+        private const double REFERENCE_DISTANCE = 1000.0; // meters
+        private const double PATH_LOSS_EXPONENT = 2.0;   // Free space path loss
+
         // Public properties for UI display and monitoring
         public bool IsInitialScan => isInitialScan;
         public double CurrentScanArea => Math.Max(horizontalScanArea, verticalScanArea);
@@ -131,12 +143,21 @@ namespace Project.Services
         /// <summary>
         /// Updates the scanning antenna's position to search for and track aircraft
         /// </summary>
-        public void UpdateScanningAntenna(AntennaState antenna, AirplaneState airplane)
+        public double UpdateScanningAntenna(AntennaState antenna, AirplaneState airplane)
         {
-            if (airplane == null) return;
+            if (airplane == null) return MIN_RSSI;
+
+            // Check if it's time to reset PSO
+            if ((DateTime.Now - lastPsoReset).TotalSeconds >= PSO_RESET_INTERVAL)
+            {
+                pso.Reset();
+                pso = new ParticleSwarmOptimizer(PARTICLE_COUNT);
+                lastPsoReset = DateTime.Now;
+                System.Diagnostics.Debug.WriteLine("PSO Reset performed");
+            }
 
             // Düzeltme: Güncelleme hızını artır
-            if ((DateTime.Now - lastScanUpdate).TotalSeconds < SCAN_UPDATE_RATE * 0.5) return;
+            if ((DateTime.Now - lastScanUpdate).TotalSeconds < SCAN_UPDATE_RATE * 0.5) return MIN_RSSI;
             lastScanUpdate = DateTime.Now;
 
             double antennaLat = antenna.Latitude;
@@ -210,7 +231,7 @@ namespace Project.Services
                     horizontalScanArea = INITIAL_SCAN_AREA_H;
                     verticalScanArea = INITIAL_SCAN_AREA_V;
                 }
-                return;
+                return MIN_RSSI;
             }
             else if (isInitialScan)
             {
@@ -238,6 +259,73 @@ namespace Project.Services
             // Sinyal metriklerini güncelle...
             UpdateSignalMetrics(antenna);
             scanPhaseDegrees = (int)(antenna.HorizontalAngle % 360);
+
+            // Calculate realistic RSSI based on distance
+            double distance = CalculateDistance(
+                antenna.Latitude, antenna.Longitude, antenna.Altitude,
+                airplane.Latitude, airplane.Longitude, airplane.Altitude
+            );
+
+            // Calculate path loss
+            double pathLoss = CalculatePathLoss(distance);
+
+            // Calculate angle loss
+            double angleLoss = CalculateAngleLoss(
+                antenna.HorizontalAngle, antenna.VerticalAngle,
+                lastKnownTargetH, lastKnownTargetV
+            );
+
+            // Final RSSI calculation
+            double rssi = MAX_RSSI - pathLoss - angleLoss;
+            rssi = Math.Max(MIN_RSSI, Math.Min(MAX_RSSI, rssi));
+
+            // Update antenna metrics
+            antenna.RSSI = rssi;
+            antenna.SNR = CalculateSNR(rssi);
+            antenna.SignalStrength = ConvertRssiToSignalStrength(rssi);
+
+            return rssi;
+        }
+
+        private double CalculatePathLoss(double distance)
+        {
+            // Free space path loss calculation
+            double pathLoss = 20 * Math.Log10(distance / REFERENCE_DISTANCE);
+            pathLoss *= PATH_LOSS_EXPONENT;
+
+            // Add random variations for realism
+            Random rand = new Random();
+            double variation = (rand.NextDouble() - 0.5) * 2; // ±1 dB variation
+
+            return pathLoss + variation;
+        }
+
+        private double CalculateAngleLoss(double currentH, double currentV, double targetH, double targetV)
+        {
+            // Calculate angular difference
+            double hDiff = Math.Abs(((targetH - currentH + 540.0) % 360.0) - 180.0);
+            double vDiff = Math.Abs(targetV - currentV);
+
+            // Convert angular difference to loss
+            // 3dB loss at 30 degrees off-axis
+            double hLoss = Math.Pow(hDiff / 30.0, 2) * 3.0;
+            double vLoss = Math.Pow(vDiff / 30.0, 2) * 3.0;
+
+            return hLoss + vLoss;
+        }
+
+        private double CalculateSNR(double rssi)
+        {
+            const double NOISE_FLOOR = -120; // dBm
+            double snr = rssi - NOISE_FLOOR;
+            return Math.Max(0, snr);
+        }
+
+        private double ConvertRssiToSignalStrength(double rssi)
+        {
+            // Convert RSSI (-120 to -40 dBm) to signal strength (0-100%)
+            double normalizedRssi = (rssi - MIN_RSSI) / (MAX_RSSI - MIN_RSSI);
+            return Math.Max(0, Math.Min(100, normalizedRssi * 100));
         }
 
         // SimulateSignalStrength fonksiyonunu gerçekçi hale getir
@@ -779,7 +867,7 @@ namespace Project.Services
                 PredictTargetMovement();
             }
         }
-       
+
         /// <summary>
         /// Calculate antenna horizontal and vertical angles needed to point at aircraft
         /// </summary>

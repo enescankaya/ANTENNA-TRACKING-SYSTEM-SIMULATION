@@ -532,11 +532,14 @@ namespace Project
                 directionalAntenna.Longitude = antennaPosition.Lng;
                 directionalAntenna.Altitude = 0;
 
-                // Update scanning antenna using PSO
-                antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
+                // Update scanning antenna using PSO with periodic reset
+                double currentRssi = antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
 
-                // Ensure directional antenna follows the best signal found by the scanning antenna
-                antennaController.UpdateDirectionalAntenna(directionalAntenna, scanningAntenna, airplane);
+                // If we got a good RSSI, update directional antenna
+                if (currentRssi > -85) // -85 dBm threshold for usable signal
+                {
+                    antennaController.UpdateDirectionalAntenna(directionalAntenna, scanningAntenna, airplane);
+                }
 
                 // Refresh UI elements
                 await Dispatcher.InvokeAsync(() =>
