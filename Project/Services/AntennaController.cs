@@ -99,13 +99,22 @@ namespace Project.Services
         private const int MAX_PSO_ITERATIONS = 50;
         private const int PARTICLE_COUNT = 30;
         private DateTime lastPsoReset = DateTime.MinValue;
-        private const double PSO_RESET_INTERVAL = 2.0; // 2 seconds
+        private const double PSO_RESET_INTERVAL = 3.0; // 2 seconds
 
         // Signal strength calculation parameters
         private const double MAX_RSSI = -40.0;  // dBm, very close to transmitter
         private const double MIN_RSSI = -120.0; // dBm, at maximum range
         private const double REFERENCE_DISTANCE = 1000.0; // meters
         private const double PATH_LOSS_EXPONENT = 2.0;   // Free space path loss
+
+        // Sabitler - Ani sapmaları önlemek için
+        private const double MAX_ANGLE_CHANGE = 30.0;  // Bir adımda maksimum açı değişimi
+        private const double SIGNAL_STABILITY_THRESHOLD = 5.0; // Sinyal kararlılık eşiği
+        private const int STABLE_SIGNAL_COUNT = 3; // Kararlı sinyal sayısı
+        private readonly Queue<double> recentSignals = new Queue<double>();
+        private double lastValidHorizontalAngle = 0;
+        private double lastValidVerticalAngle = 0;
+        private bool hasValidPosition = false;
 
         // Public properties for UI display and monitoring
         public bool IsInitialScan => isInitialScan;
@@ -770,91 +779,102 @@ namespace Project.Services
                                         double antennaLat, double antennaLon, double antennaAlt,
                                         double targetH, double targetV)
         {
-            // Düzeltme 1: Signal kaybı durumunda hızlı tepki için kontrol ekleyelim
-            // Gerçek anten açılarına göre sinyal ölçümü yapalım
+            // Sinyal kararlılığını kontrol et
+            if (recentSignals.Count >= STABLE_SIGNAL_COUNT)
+            {
+                recentSignals.Dequeue();
+            }
+            recentSignals.Enqueue(bestSignalStrength);
+
+            bool isSignalStable = recentSignals.Count == STABLE_SIGNAL_COUNT &&
+                                 recentSignals.Max() - recentSignals.Min() < SIGNAL_STABILITY_THRESHOLD;
+
+            // Gerçek sinyal gücünü ölç
             double realSignalStrength = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
 
-            // Eğer sinyal ani düşüş gösteriyorsa, hedef pozisyonu tekrar hesaplayalım
+            // Ani sinyal düşüşü kontrolü
             if (realSignalStrength < bestSignalStrength * 0.5 && bestSignalStrength > TRACKING_THRESHOLD)
             {
-                // Uçak hareket etmiş, yeni konumunu hesaplayalım
-                GetTargetAngles(antennaLat, antennaLon, antennaAlt, airplane, out double newTargetH, out double newTargetV);
-                lastKnownTargetH = newTargetH;
-                lastKnownTargetV = newTargetV;
+                GetTargetAngles(antennaLat, antennaLon, antennaAlt, airplane, out targetH, out targetV);
 
-                // Tarama alanını genişletelim
-                horizontalScanArea = Math.Min(MAX_SCAN_AREA_H, horizontalScanArea * 2);
-                verticalScanArea = Math.Min(MAX_SCAN_AREA_V, verticalScanArea * 2);
+                // Açı değişimini sınırla
+                double hDiff = GetAngleDifference(targetH, antenna.HorizontalAngle);
+                double vDiff = targetV - antenna.VerticalAngle;
 
-                // En iyi sinyal bilgisi güncellendisini düşürelim
-                bestSignalStrength = realSignalStrength;
-                bestHorizontalAngle = antenna.HorizontalAngle;
-                bestVerticalAngle = antenna.VerticalAngle;
+                if (Math.Abs(hDiff) > MAX_ANGLE_CHANGE || Math.Abs(vDiff) > MAX_ANGLE_CHANGE)
+                {
+                    // Değişimi sınırla
+                    targetH = antenna.HorizontalAngle + Math.Sign(hDiff) * MAX_ANGLE_CHANGE;
+                    targetV = antenna.VerticalAngle + Math.Sign(vDiff) * MAX_ANGLE_CHANGE;
+                }
 
-                // Takip modundan çıkıp acquisition moduna geçelim
-                targetLocked = false;
-                currentScanMode = "Signal Re-Acquisition";
-                return; // Diğer tracking işlemlerini bu adımda yapmayalım
+                lastKnownTargetH = targetH;
+                lastKnownTargetV = targetV;
+
+                if (!hasValidPosition)
+                {
+                    lastValidHorizontalAngle = antenna.HorizontalAngle;
+                    lastValidVerticalAngle = antenna.VerticalAngle;
+                    hasValidPosition = true;
+                }
             }
 
-            // Orjinal kod: Dar tarama alanı
-            horizontalScanArea = Math.Max(MIN_SCAN_AREA_H, 30.0 * (1.0 - bestSignalStrength / 100.0));
-            verticalScanArea = Math.Max(MIN_SCAN_AREA_V, 15.0 * (1.0 - bestSignalStrength / 100.0));
-
-            // Düzeltme 2: PSO güncelleştirme oranını artırma
-            if ((DateTime.Now - lastPsoUpdate).TotalSeconds >= PSO_UPDATE_RATE * 0.3) // Daha hızlı güncellemeler
+            // PSO güncellemesi için zaman kontrolü
+            if ((DateTime.Now - lastPsoUpdate).TotalSeconds >= PSO_UPDATE_RATE)
             {
                 lastPsoUpdate = DateTime.Now;
 
-                // Düzeltme 3: Hedef pozisyonunun ağırlığını artırma
-                double searchCenterH = WeightedAngleAverage(
-                    targetH,
-                    WeightedAngleAverage(bestHorizontalAngle, predictedHorizontalAngle, 0.5, 0.5),
-                    0.5, // Daha fazla ağırlık (önceki: TARGET_WEIGHT)
-                    0.5); // Daha az ağırlık (önceki: SIGNAL_WEIGHT + PREDICTION_WEIGHT)
-
-                double searchCenterV =
-                    targetV * 0.5 + // Daha fazla ağırlık (önceki: TARGET_WEIGHT)
-                    (bestVerticalAngle * 0.5 + predictedVerticalAngle * 0.5) * 0.5; // Daha az ağırlık
-
-                // Düzeltme 4: Fitness fonksiyonunu değiştirme
-                Func<double, double, double> trackingFitnessFunction = (h, v) =>
+                // Kararlı sinyalde ani değişimleri engelle
+                if (isSignalStable && hasValidPosition)
                 {
-                    // Anteni değerlendirme konumuna getir
+                    double maxChange = MAX_ANGLE_CHANGE * 0.5; // Kararlı durumda daha yavaş hareket
+                    targetH = ClampAngleChange(lastValidHorizontalAngle, targetH, maxChange);
+                    targetV = ClampAngleChange(lastValidVerticalAngle, targetV, maxChange);
+                }
+
+                // Fitness fonksiyonunu güncelle
+                Func<double, double, double> trackingFitnessFunc = (h, v) =>
+                {
+                    // Mevcut konumdan çok uzaklaşmayı cezalandır
+                    double anglePenalty = 0;
+                    if (hasValidPosition)
+                    {
+                        double hDiff = Math.Abs(GetAngleDifference(h, lastValidHorizontalAngle));
+                        double vDiff = Math.Abs(v - lastValidVerticalAngle);
+                        anglePenalty = (hDiff + vDiff) * 0.1; // Uzaklaştıkça artan ceza
+                    }
+
                     antenna.HorizontalAngle = h;
                     antenna.VerticalAngle = v;
 
-                    // Bu konumdaki sinyal gücünü al
-                    double signalStrength = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
+                    double signal = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
+                    signal = signalFilter.Update(signal);
 
-                    // Kalman filtresi uygulamasını azalt - daha hızlı tepki
-                    signalStrength = signalFilter.Update(signalStrength);
-
-                    // Düzeltme 5: En iyi sinyali daha agresif güncelleme
-                    if (signalStrength > bestSignalStrength * 0.8) // Daha düşük eşik
-                    {
-                        bestSignalStrength = signalStrength * 0.6 + bestSignalStrength * 0.4; // Yeni değere daha fazla ağırlık
-                        bestHorizontalAngle = h;
-                        bestVerticalAngle = v;
-                    }
-
-                    return signalStrength;
+                    // Ceza puanını uygula
+                    return Math.Max(0, signal - anglePenalty);
                 };
 
-                // Düzeltme 6: PSO'yu daha geniş bir aramayla çalıştır
+                // PSO güncellemesi
                 var (optH, optV) = pso.ScanStep(
-                    trackingFitnessFunction,
-                    Math.Max(horizontalScanArea, 20.0), // Minimum 20 derecelik bir arama
-                    Math.Max(verticalScanArea, 10.0),   // Minimum 10 derecelik bir arama
-                    searchCenterH,
-                    searchCenterV,
+                    trackingFitnessFunc,
+                    horizontalScanArea,
+                    verticalScanArea,
+                    targetH,
+                    targetV,
                     true,
                     predictedHorizontalAngle,
                     predictedVerticalAngle
                 );
 
-                // Düzeltme 7: Kalman filtreleme parametrelerini ayarla
-                // Daha az filtreleme, daha hızlı tepki
+                // Yeni konum geçerliyse kaydet
+                if (realSignalStrength > TRACKING_THRESHOLD * 0.8)
+                {
+                    lastValidHorizontalAngle = antenna.HorizontalAngle;
+                    lastValidVerticalAngle = antenna.VerticalAngle;
+                    hasValidPosition = true;
+                }
+
+                // Kalman filtreleme
                 double filteredH = horizontalFilter.Update(optH);
                 double filteredV = verticalFilter.Update(optV);
 
@@ -862,10 +882,28 @@ namespace Project.Services
                 antenna.HorizontalAngle = filteredH;
                 antenna.VerticalAngle = filteredV;
 
-                // Düzeltme 8: Pozisyon geçmişi ve tahmin mekanizmasını güncelle
+                // Pozisyon geçmişi ve tahmin mekanizmasını güncelle
                 UpdatePositionHistory(bestHorizontalAngle, bestVerticalAngle);
                 PredictTargetMovement();
             }
+        }
+
+        // Açı değişimini sınırlayan yardımcı metod
+        private double ClampAngleChange(double current, double target, double maxChange)
+        {
+            double diff = GetAngleDifference(target, current);
+            if (Math.Abs(diff) > maxChange)
+            {
+                return (current + Math.Sign(diff) * maxChange + 360.0) % 360.0;
+            }
+            return target;
+        }
+
+        // İki açı arasındaki en kısa farkı hesaplayan yardımcı metod
+        private double GetAngleDifference(double angle1, double angle2)
+        {
+            double diff = ((angle1 - angle2 + 540.0) % 360.0) - 180.0;
+            return diff;
         }
 
         /// <summary>
@@ -991,6 +1029,12 @@ namespace Project.Services
             isExplorationPhase = true;
             explorationElapsed = 0;
             explorationAngle = 0;
+
+            // Reset signal stability tracking
+            recentSignals.Clear();
+            hasValidPosition = false;
+            lastValidHorizontalAngle = 0;
+            lastValidVerticalAngle = 0;
         }
 
         /// <summary>
