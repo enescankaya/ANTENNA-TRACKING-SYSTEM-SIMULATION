@@ -130,6 +130,7 @@
       <SubType>Designer</SubType>
     </ApplicationDefinition>
     <Compile Include="Services\AntennaController.cs" />
+    <Compile Include="Services\ColorHelper.cs" />
     <Compile Include="Services\KalmanFilter.cs" />
     <Compile Include="Services\MapVisualization.cs" />
     <Compile Include="Services\ParticleSwarmOptimizer.cs" />

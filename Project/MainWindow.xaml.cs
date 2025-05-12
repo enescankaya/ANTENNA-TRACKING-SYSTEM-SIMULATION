@@ -12,6 +12,8 @@ using GMap.NET.MapProviders;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Media.Animation;
+using static Project.Services.AntennaController;
+using System.Collections.Generic;
 
 namespace Project
 {
@@ -597,7 +599,7 @@ namespace Project
                 currentAltitude = e.Altitude;
                 currentSpeed = e.GroundSpeed;
                 currentBattery = e.Battery;
-                currentThrottle = e.Throttle;
+                currentThrottle = e.Throttle; // Fix: Properly assign throttle value
 
                 // Calculate angles from antenna to aircraft
                 double targetAngleH = CalculateHorizontalAngle(
@@ -1414,150 +1416,191 @@ namespace Project
                 PsoVisualizationCanvas.Children.Clear();
 
                 // Grid çizgilerini çiz
-                for (int i = 1; i < 4; i++)
-                {
-                    var horizontalLine = new Line
-                    {
-                        X1 = 0,
-                        X2 = 280,
-                        Y1 = i * 70,
-                        Y2 = i * 70,
-                        Stroke = new SolidColorBrush(Color.FromArgb(32, 255, 255, 255)),
-                        StrokeThickness = 1,
-                        StrokeDashArray = new DoubleCollection { 4, 4 }
-                    };
-                    PsoVisualizationCanvas.Children.Add(horizontalLine);
+                DrawPsoGrid();
 
-                    var verticalLine = new Line
-                    {
-                        X1 = i * 70,
-                        X2 = i * 70,
-                        Y1 = 0,
-                        Y2 = 280,
-                        Stroke = new SolidColorBrush(Color.FromArgb(32, 255, 255, 255)),
-                        StrokeThickness = 1,
-                        StrokeDashArray = new DoubleCollection { 4, 4 }
-                    };
-                    PsoVisualizationCanvas.Children.Add(verticalLine);
-                }
-
-                // PSO durumunu al
                 var psoState = antennaController?.GetPsoState();
                 if (psoState == null) return;
 
-                // Koordinat dönüşümü için helper fonksiyonlar - Sınırları kontrol et
-                double ScaleH(double angle)
-                {
-                    angle = Math.Max(0, Math.Min(360, angle)); // Açıyı 0-360 arasında sınırla
-                    return (angle / 360.0) * 180; // Canvas boyutu 180x180
-                }
+                // Parçacık geçmişini çiz
+                DrawParticleHistory(psoState.BestPositionHistory);
 
-                double ScaleV(double angle)
-                {
-                    angle = Math.Max(0, Math.Min(90, angle)); // Açıyı 0-90 arasında sınırla
-                    return (angle / 90.0) * 180; // Canvas boyutu 180x180
-                }
+                // Search area indicator
+                DrawSearchArea(psoState.SearchAreaH, psoState.SearchAreaV, psoState.BestPosition);
 
-                // Parçacıkları çiz
-                foreach (var particle in psoState.Particles)
-                {
-                    // Pozisyonları sınırlar içinde tut
-                    double x = Math.Max(3, Math.Min(177, ScaleH(particle.HorizontalPosition)));
-                    double y = Math.Max(3, Math.Min(177, ScaleV(particle.VerticalPosition)));
-
-                    // Hız vektörünü de sınırla
-                    double vx = particle.HorizontalVelocity * 0.25; // Hız etkisini azalt
-                    double vy = particle.VerticalVelocity * 0.25;
-
-                    // Hız çizgisinin bitiş noktasını sınırla
-                    double endX = Math.Max(0, Math.Min(180, x + vx));
-                    double endY = Math.Max(0, Math.Min(180, y + vy));
-
-                    var ellipse = new Ellipse
-                    {
-                        Width = 6,
-                        Height = 6,
-                        Fill = new SolidColorBrush(Colors.Yellow),
-                        Opacity = 0.8,
-                        Effect = new System.Windows.Media.Effects.DropShadowEffect
-                        {
-                            Color = Colors.Yellow,
-                            BlurRadius = 10,
-                            ShadowDepth = 0
-                        }
-                    };
-
-                    Canvas.SetLeft(ellipse, x - 3);
-                    Canvas.SetTop(ellipse, y - 3);
-
-                    var velocityLine = new Line
-                    {
-                        Stroke = new SolidColorBrush(Colors.Yellow),
-                        StrokeThickness = 1.5,
-                        Opacity = 0.6,
-                        X1 = x,
-                        Y1 = y,
-                        X2 = endX,
-                        Y2 = endY
-                    };
-
-                    PsoVisualizationCanvas.Children.Add(velocityLine);
-                    PsoVisualizationCanvas.Children.Add(ellipse);
-                }
+                // Parçacıkları çiz - fitness değerine göre renk ve boyut değişimi
+                DrawParticles(psoState.Particles, psoState.ParticleFitness);
 
                 // En iyi pozisyonu göster
-                var bestPosition = new Ellipse
-                {
-                    Width = 12,
-                    Height = 12,
-                    Fill = new SolidColorBrush(Colors.Lime),
-                    Stroke = new SolidColorBrush(Colors.White),
-                    StrokeThickness = 2,
-                    Effect = new System.Windows.Media.Effects.DropShadowEffect
-                    {
-                        Color = Colors.Lime,
-                        BlurRadius = 15,
-                        ShadowDepth = 0
-                    }
-                };
+                DrawBestPosition(psoState.BestPosition, psoState.BestFitness);
 
-                Canvas.SetLeft(bestPosition, ScaleH(psoState.BestPosition.H) - 6);
-                Canvas.SetTop(bestPosition, ScaleV(psoState.BestPosition.V) - 6);
-                PsoVisualizationCanvas.Children.Add(bestPosition);
-
-                // Metrikleri güncelle
-                BestPositionH.Text = $"{psoState.BestPosition.H:F1}°";
-                BestPositionV.Text = $"{psoState.BestPosition.V:F1}°";
-
-                // --- FIX: ConvergenceBar always updates visually ---
-                double convergenceValue = (antennaController?.ConvergenceRate ?? 0) * 100;
-                // Set value directly first
-                ConvergenceBar.Value = convergenceValue;
-
-                // Animate to new value for smoothness
-                var convergenceAnimation = new DoubleAnimation
-                {
-                    From = ConvergenceBar.Value,
-                    To = convergenceValue,
-                    Duration = TimeSpan.FromMilliseconds(500),
-                    EasingFunction = new PowerEase
-                    {
-                        Power = 3,
-                        EasingMode = EasingMode.EaseOut
-                    }
-                };
-                ConvergenceBar.BeginAnimation(ProgressBar.ValueProperty, convergenceAnimation);
-
-                // Metin güncellemesi
-                ConvergenceText.Text = $"{convergenceValue:F0}%";
-
-                SearchAreaText.Text = $"H: {psoState.SearchAreaH:F1}° × V: {psoState.SearchAreaV:F1}°";
-                ParticleCountText.Text = psoState.ParticleCount.ToString();
+                // Convergence ve search radius göstergeleri
+                UpdatePsoMetrics(psoState);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"PSO visualization error: {ex.Message}");
             }
+        }
+
+        private void DrawPsoGrid()
+        {
+            // Izgarayı daha belirgin hale getir
+            for (int i = 0; i <= 180; i += 45)
+            {
+                var horizontalLine = new Line
+                {
+                    X1 = 0,
+                    X2 = 180,
+                    Y1 = i,
+                    Y2 = i,
+                    Stroke = new SolidColorBrush(Color.FromArgb(32, 255, 255, 255)),
+                    StrokeThickness = i % 90 == 0 ? 2 : 1,
+                    StrokeDashArray = new DoubleCollection { 4, 4 }
+                };
+                PsoVisualizationCanvas.Children.Add(horizontalLine);
+
+                var verticalLine = new Line
+                {
+                    X1 = i,
+                    X2 = i,
+                    Y1 = 0,
+                    Y2 = 180,
+                    Stroke = new SolidColorBrush(Color.FromArgb(32, 255, 255, 255)),
+                    StrokeThickness = i % 90 == 0 ? 2 : 1,
+                    StrokeDashArray = new DoubleCollection { 4, 4 }
+                };
+                PsoVisualizationCanvas.Children.Add(verticalLine);
+            }
+        }
+
+        private void DrawParticleHistory(Queue<(double H, double V)> history)
+        {
+            if (history.Count < 2) return;
+
+            var points = new PointCollection();
+            foreach (var pos in history)
+            {
+                points.Add(new Point(ScaleH(pos.H), ScaleV(pos.V)));
+            }
+
+            var historyPath = new System.Windows.Shapes.Polyline
+            {
+                Points = points,
+                Stroke = new SolidColorBrush(Colors.Yellow),
+                StrokeThickness = 1,
+                Opacity = 0.3
+            };
+
+            PsoVisualizationCanvas.Children.Add(historyPath);
+        }
+
+        private void DrawSearchArea(double areaH, double areaV, (double H, double V) center)
+        {
+            var ellipse = new Ellipse
+            {
+                Width = ScaleH(areaH),
+                Height = ScaleV(areaV),
+                Stroke = new SolidColorBrush(Colors.LightBlue),
+                StrokeThickness = 1,
+                StrokeDashArray = new DoubleCollection { 2, 2 },
+                Opacity = 0.3
+            };
+
+            Canvas.SetLeft(ellipse, ScaleH(center.H) - ellipse.Width / 2);
+            Canvas.SetTop(ellipse, ScaleV(center.V) - ellipse.Height / 2);
+            PsoVisualizationCanvas.Children.Add(ellipse);
+        }
+
+        private void DrawParticles(List<ParticleData> particles, List<double> fitness)
+        {
+            for (int i = 0; i < particles.Count; i++)
+            {
+                var particle = particles[i];
+                double normalizedFitness = fitness[i] / fitness.Max();
+
+                // Fitness değerine göre renk değişimi
+                Color particleColor = ColorHelper.LerpColor(Colors.Red, Colors.LightGreen, normalizedFitness);
+
+                var ellipse = new Ellipse
+                {
+                    Width = 6 + normalizedFitness * 4,
+                    Height = 6 + normalizedFitness * 4,
+                    Fill = new SolidColorBrush(particleColor),
+                    Opacity = 0.8,
+                    Effect = new System.Windows.Media.Effects.DropShadowEffect
+                    {
+                        Color = particleColor,
+                        BlurRadius = 10,
+                        ShadowDepth = 0
+                    }
+                };
+
+                Canvas.SetLeft(ellipse, ScaleH(particle.HorizontalPosition) - ellipse.Width / 2);
+                Canvas.SetTop(ellipse, ScaleV(particle.VerticalPosition) - ellipse.Height / 2);
+
+                // Hız vektörü
+                var velocityLine = new Line
+                {
+                    X1 = ScaleH(particle.HorizontalPosition),
+                    Y1 = ScaleV(particle.VerticalPosition),
+                    X2 = ScaleH(particle.HorizontalPosition + particle.HorizontalVelocity * 0.25),
+                    Y2 = ScaleV(particle.VerticalPosition + particle.VerticalVelocity * 0.25),
+                    Stroke = new SolidColorBrush(particleColor),
+                    StrokeThickness = 1.5,
+                    Opacity = 0.6
+                };
+
+                PsoVisualizationCanvas.Children.Add(velocityLine);
+                PsoVisualizationCanvas.Children.Add(ellipse);
+            }
+        }
+
+        private void DrawBestPosition((double H, double V) bestPosition, double fitness)
+        {
+            var bestMarker = new Ellipse
+            {
+                Width = 12,
+                Height = 12,
+                Fill = new SolidColorBrush(Colors.Lime),
+                Stroke = new SolidColorBrush(Colors.White),
+                StrokeThickness = 2,
+                Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = Colors.Lime,
+                    BlurRadius = 15,
+                    ShadowDepth = 0
+                }
+            };
+
+            Canvas.SetLeft(bestMarker, ScaleH(bestPosition.H) - 6);
+            Canvas.SetTop(bestMarker, ScaleV(bestPosition.V) - 6);
+            PsoVisualizationCanvas.Children.Add(bestMarker);
+        }
+
+        private void UpdatePsoMetrics(PsoState state)
+        {
+            // Update metrics display
+            BestPositionH.Text = $"{state.BestPosition.H:F1}°";
+            BestPositionV.Text = $"{state.BestPosition.V:F1}°";
+
+            double convergenceValue = (state.ConvergenceRate) * 100;
+            ConvergenceBar.Value = convergenceValue;
+            ConvergenceText.Text = $"{convergenceValue:F0}%";
+
+            SearchAreaText.Text = $"H: {state.SearchAreaH:F1}° × V: {state.SearchAreaV:F1}°";
+            ParticleCountText.Text = state.ParticleCount.ToString();
+        }
+
+        private double ScaleH(double angle)
+        {
+            angle = Math.Max(0, Math.Min(360, angle));
+            return (angle / 360.0) * 180;
+        }
+
+        private double ScaleV(double angle)
+        {
+            angle = Math.Max(0, Math.Min(90, angle));
+            return (angle / 90.0) * 180;
         }
     }
 }

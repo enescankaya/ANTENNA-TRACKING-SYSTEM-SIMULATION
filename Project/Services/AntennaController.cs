@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Shapes;
 using Project.Models;
 
 namespace Project.Services
@@ -856,7 +859,7 @@ namespace Project.Services
             // Dikey açıyı hesapla (yataydan yukarı)
             double groundDistance = Math.Sqrt(dx * dx + dy * dy);
             verticalAngle = Math.Atan2(dz, groundDistance) * 180.0 / Math.PI;
-            verticalAngle = Math.Max(0, Math.Min(90.0, verticalAngle));
+            verticalAngle = Math.Max(0, Math.Min(90, verticalAngle));
         }
 
         /// <summary>
@@ -988,32 +991,162 @@ namespace Project.Services
 
         public class PsoState
         {
-            public List<(double HorizontalPosition, double VerticalPosition,
-                        double HorizontalVelocity, double VerticalVelocity)> Particles
-            { get; set; }
+            public List<ParticleData> Particles { get; set; }
             public (double H, double V) BestPosition { get; set; }
+            public double BestFitness { get; set; }
+            public List<double> ParticleFitness { get; set; }
             public double ConvergenceRate { get; set; }
             public double SearchAreaH { get; set; }
             public double SearchAreaV { get; set; }
             public int ParticleCount { get; set; }
+            public Queue<(double H, double V)> BestPositionHistory { get; set; }
+            public double SearchRadius { get; set; }
+        }
+
+        public class ParticleData
+        {
+            public double HorizontalPosition { get; set; }
+            public double VerticalPosition { get; set; }
+            public double HorizontalVelocity { get; set; }
+            public double VerticalVelocity { get; set; }
+            public double BestFitness { get; set; }
         }
 
         public PsoState GetPsoState()
         {
+            var particleData = pso.GetParticles().Select(p => new ParticleData
+            {
+                HorizontalPosition = p.HorizontalPosition,
+                VerticalPosition = p.VerticalPosition,
+                HorizontalVelocity = p.HorizontalVelocity,
+                VerticalVelocity = p.VerticalVelocity,
+                BestFitness = p.BestFitness
+            }).ToList();
+
             return new PsoState
             {
-                Particles = pso.GetParticles().Select(p => (
-                    p.HorizontalPosition,
-                    p.VerticalPosition,
-                    p.HorizontalVelocity,
-                    p.VerticalVelocity
-                )).ToList(),
+                Particles = particleData,
                 BestPosition = (pso.BestHorizontalAngle, pso.BestVerticalAngle),
+                BestFitness = pso.BestFitness,
+                ParticleFitness = particleData.Select(p => p.BestFitness).ToList(),
                 ConvergenceRate = pso.ConvergenceRate,
                 SearchAreaH = horizontalScanArea,
                 SearchAreaV = verticalScanArea,
-                ParticleCount = pso.ParticleCount
+                ParticleCount = pso.ParticleCount,
+                BestPositionHistory = new Queue<(double H, double V)>(positionHistory.Select(p => (p.h, p.v))),
+                SearchRadius = pso.SearchRadius
             };
+        }
+
+        private void DrawParticles(List<ParticleData> particles, List<double> fitness, Canvas canvas)
+        {
+            if (particles == null || fitness == null || particles.Count == 0 || canvas == null) return;
+
+            double bestFitness = particles.Max(p => p.BestFitness);
+            double worstFitness = particles.Min(p => p.BestFitness);
+            double fitnessRange = bestFitness - worstFitness;
+
+            // Canvas boyutları
+            double canvasWidth = canvas.ActualWidth > 0 ? canvas.ActualWidth : 180;
+            double canvasHeight = canvas.ActualHeight > 0 ? canvas.ActualHeight : 180;
+
+            // Merkez noktası
+            double centerX = canvasWidth / 2;
+            double centerY = canvasHeight / 2;
+
+            for (int i = 0; i < particles.Count; i++)
+            {
+                var particle = particles[i];
+                double normalizedFitness = fitnessRange > 0 ?
+                    (particle.BestFitness - worstFitness) / fitnessRange : 0;
+
+                // Renk gradyanı (düşük fitness: kırmızı, yüksek fitness: yeşil)
+                byte red = (byte)(255 * (1 - normalizedFitness));
+                byte green = (byte)(255 * normalizedFitness);
+                Color particleColor = Color.FromRgb(red, green, 0);
+
+                // Fitness bazlı boyut (3-8 piksel)
+                double size = 3 + (normalizedFitness * 5);
+
+                // Pozisyon hesaplama - merkezlenmiş ve ölçeklenmiş
+                // Yatay açıyı 360 derece üzerinden pozisyona çevir
+                double angleRadians = (particle.HorizontalPosition * Math.PI / 180.0);
+                // Dikey açıyı 0-90 yerine 30-90 aralığına sıkıştır
+                double radius = ((90 - particle.VerticalPosition) / 90.0) * (canvasWidth * 0.4);
+
+                // Polar koordinatları kartezyen koordinatlara çevir
+                double x = centerX + radius * Math.Cos(angleRadians);
+                double y = centerY + radius * Math.Sin(angleRadians);
+
+                // Parçacık göstergesi
+                var particleMarker = new Ellipse
+                {
+                    Width = size,
+                    Height = size,
+                    Fill = new SolidColorBrush(particleColor),
+                    Opacity = 0.8
+                };
+
+                Canvas.SetLeft(particleMarker, x - size / 2);
+                Canvas.SetTop(particleMarker, y - size / 2);
+
+                // Hız vektörü çizimi
+                double velocityMagnitude = Math.Sqrt(
+                    particle.HorizontalVelocity * particle.HorizontalVelocity +
+                    particle.VerticalVelocity * particle.VerticalVelocity);
+
+                if (velocityMagnitude > 0.1)
+                {
+                    // Hız vektörünü polar koordinatlara göre ayarla
+                    double vx = particle.HorizontalVelocity * Math.Cos(angleRadians) -
+                               particle.VerticalVelocity * Math.Sin(angleRadians);
+                    double vy = particle.HorizontalVelocity * Math.Sin(angleRadians) +
+                               particle.VerticalVelocity * Math.Cos(angleRadians);
+
+                    var velocityLine = new Line
+                    {
+                        X1 = x,
+                        Y1 = y,
+                        X2 = x + vx,
+                        Y2 = y + vy,
+                        Stroke = new SolidColorBrush(particleColor),
+                        StrokeThickness = 1,
+                        Opacity = 0.6
+                    };
+
+                    canvas.Children.Add(velocityLine);
+                }
+
+                canvas.Children.Add(particleMarker);
+            }
+
+            // Eksen çizgilerini çiz
+            var axes = new Line[]
+            {
+                new Line // Yatay eksen
+                {
+                    X1 = 0,
+                    Y1 = centerY,
+                    X2 = canvasWidth,
+                    Y2 = centerY,
+                    Stroke = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+                    StrokeThickness = 1
+                },
+                new Line // Dikey eksen
+                {
+                    X1 = centerX,
+                    Y1 = 0,
+                    X2 = centerX,
+                    Y2 = canvasHeight,
+                    Stroke = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+                    StrokeThickness = 1
+                }
+            };
+
+            foreach (var axis in axes)
+            {
+                canvas.Children.Add(axis);
+            }
         }
     }
 }

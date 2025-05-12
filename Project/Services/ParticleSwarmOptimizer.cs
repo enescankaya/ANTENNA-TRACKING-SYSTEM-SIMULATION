@@ -425,13 +425,15 @@ namespace Project.Services
         /// Returns current state of all particles for visualization
         /// </summary>
         public IEnumerable<(double HorizontalPosition, double VerticalPosition,
-                           double HorizontalVelocity, double VerticalVelocity)> GetParticles()
+                           double HorizontalVelocity, double VerticalVelocity,
+                           double BestFitness)> GetParticles()
         {
             return particles.Select(p => (
                 p.HorizontalPosition,
                 p.VerticalPosition,
                 p.HorizontalVelocity,
-                p.VerticalVelocity
+                p.VerticalVelocity,
+                p.BestFitness
             ));
         }
 
