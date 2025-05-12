@@ -162,22 +162,37 @@ namespace Project
             figure.Segments.Add(arcSegment);
             geometry.Figures.Add(figure);
 
-            // Tarama anteni (yeşil)
+            // Tarama anteni (yeşil) - scan çizgisi
             Line scanningLine = new Line
             {
-                Stroke = Brushes.Green,
-                StrokeThickness = 2,
-                StrokeDashArray = new DoubleCollection { 2, 2 }
+                Stroke = new SolidColorBrush(Color.FromArgb(255, 0, 255, 0)), // Tam yeşil ve opak
+                StrokeThickness = 5,
+                Opacity = 1.0,
+                StrokeDashArray = new DoubleCollection { 6, 2 },
+                Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = Colors.Lime,
+                    BlurRadius = 10,
+                    ShadowDepth = 0,
+                    Opacity = 0.8
+                }
             };
+            MapCanvas.Children.Add(scanningLine);
 
             // Yönlenme anteni (mavi)
             Line directionalLine = new Line
             {
-                Stroke = Brushes.Blue,
-                StrokeThickness = 2
+                Stroke = new SolidColorBrush(Color.FromArgb(255, 0, 160, 255)),
+                StrokeThickness = 3,
+                Opacity = 0.8,
+                Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = Colors.DeepSkyBlue,
+                    BlurRadius = 8,
+                    ShadowDepth = 0,
+                    Opacity = 0.7
+                }
             };
-
-            MapCanvas.Children.Add(scanningLine);
             MapCanvas.Children.Add(directionalLine);
 
             // Anten gösterge açıklamaları - küçültülmüş hali
@@ -381,14 +396,26 @@ namespace Project
 
         private void UpdateAntennaLines(GPoint antennaPoint)
         {
-            // Update scanning antenna line
-            Line scanningLine = MapCanvas.Children.OfType<Line>()
-                .FirstOrDefault(l => l.Stroke == Brushes.Green);
+            // Scan çizgisini her zaman bulmak için: Stroke rengini kontrol etme, MapCanvas.Children'daki ilk Line'ı scan olarak kullan
+            Line scanningLine = MapCanvas.Children.OfType<Line>().FirstOrDefault();
             if (scanningLine != null && scanningAntenna != null)
             {
                 double scanAngleRad = (scanningAntenna.HorizontalAngle - 90) * Math.PI / 180;
                 double scanV = scanningAntenna.VerticalAngle;
-                double length = 100 + 20 * (scanV / 90.0);
+                double length = 120 + 40 * (scanV / 90.0);
+
+                // Özellikleri tekrar uygula (görünürlük için)
+                scanningLine.Stroke = new SolidColorBrush(Color.FromArgb(255, 0, 255, 0));
+                scanningLine.StrokeThickness = 5;
+                scanningLine.Opacity = 1.0;
+                scanningLine.StrokeDashArray = new DoubleCollection { 6, 2 };
+                scanningLine.Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = Colors.Lime,
+                    BlurRadius = 10,
+                    ShadowDepth = 0,
+                    Opacity = 0.8
+                };
 
                 AnimateLinePosition(scanningLine,
                     antennaPoint.X, antennaPoint.Y,
@@ -396,14 +423,25 @@ namespace Project
                     antennaPoint.Y + length * Math.Sin(scanAngleRad));
             }
 
-            // Update directional antenna line
-            Line directionalLine = MapCanvas.Children.OfType<Line>()
-                .FirstOrDefault(l => l.Stroke == Brushes.Blue);
+            // Directional çizgiyi MapCanvas.Children'daki ikinci Line olarak al
+            Line directionalLine = MapCanvas.Children.OfType<Line>().Skip(1).FirstOrDefault();
             if (directionalLine != null && directionalAntenna != null)
             {
                 double dirAngleRad = (directionalAntenna.HorizontalAngle - 90) * Math.PI / 180;
                 double dirV = directionalAntenna.VerticalAngle;
                 double length = 160 + 40 * (dirV / 90.0);
+
+                directionalLine.Stroke = new SolidColorBrush(Color.FromArgb(255, 0, 160, 255));
+                directionalLine.StrokeThickness = 3;
+                directionalLine.Opacity = 0.8;
+                directionalLine.StrokeDashArray = null;
+                directionalLine.Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = Colors.DeepSkyBlue,
+                    BlurRadius = 8,
+                    ShadowDepth = 0,
+                    Opacity = 0.7
+                };
 
                 AnimateLinePosition(directionalLine,
                     antennaPoint.X, antennaPoint.Y,
@@ -738,10 +776,7 @@ namespace Project
                         ScanHAngle.Text = $"{scanningAntenna.HorizontalAngle:F1}°";
                         ScanVAngle.Text = $"{scanningAntenna.VerticalAngle:F1}°";
                         SignalStrength.Text = $"RSSI: {scanningAntenna.RSSI:F1} dBm\nSNR: {scanningAntenna.SNR:F1} dB";
-
-                        // Scanning Antenna için dinamik scan area güncelleme
                         ScanAreaSize.Text = $"Scan Area: {antennaController.CurrentScanArea:F1}°";
-
                         AnimateProgressBar(ScanSignalBar, scanningAntenna.SignalStrength);
                     }
 
@@ -750,7 +785,7 @@ namespace Project
                         DirHAngle.Text = $"{directionalAntenna.HorizontalAngle:F1}°";
                         DirVAngle.Text = $"{directionalAntenna.VerticalAngle:F1}°";
 
-                        // Lock durumunda da RSSI ve SNR değerlerini güncelle
+                        // Directional antennanın RSSI/SNR değerlerini her zaman güncel göster (lock olsa da)
                         DirRssiValue.Text = $"{directionalAntenna.RSSI:F1}";
                         DirSnrValue.Text = $"{directionalAntenna.SNR:F1}";
                         AnimateProgressBar(DirSignalBar, directionalAntenna.SignalStrength);

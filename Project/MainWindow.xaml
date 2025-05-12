@@ -225,10 +225,10 @@
                             </Path.Effect>
                         </Path>
 
-                        <!-- Scanning antenna line - kalınlık ve opaklık arttırıldı -->
+                        <!-- Scanning antenna line - daha belirgin ve opak -->
                         <Line Stroke="#FF00FF00" 
-                              StrokeThickness="4" 
-                              Opacity="0.9"
+                              StrokeThickness="5" 
+                              Opacity="1.0"
                               Effect="{StaticResource GlowEffect}"
                               StrokeDashArray="6,2"/>
 
