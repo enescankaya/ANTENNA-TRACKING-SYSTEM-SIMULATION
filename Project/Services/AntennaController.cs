@@ -475,31 +475,37 @@ namespace Project.Services
         {
             if (airplane == null) return;
 
-            // Direkt olarak en iyi konumu kullan
-            double targetH = bestHorizontalAngle;
-            double targetV = bestVerticalAngle;
+            // Her zaman güncel hedef açılarını hesapla
+            GetTargetAngles(directionalAntenna.Latitude, directionalAntenna.Longitude, directionalAntenna.Altitude,
+                           airplane, out double targetH, out double targetV);
 
-            // Kalman filtresi ile yumuşat
-            double smoothedH = horizontalFilter.Update(targetH);
-            double smoothedV = verticalFilter.Update(targetV);
-
-            // Anteni yönlendir
-            directionalAntenna.HorizontalAngle = smoothedH;
-            directionalAntenna.VerticalAngle = smoothedV;
-
-            // Sinyal gücünü hesapla
+            // Lock durumunda da sinyal gücünü hesapla
             double signal = SimulateSignalStrength(
-                directionalAntenna, airplane,
+                directionalAntenna,
+                airplane,
                 directionalAntenna.Latitude,
                 directionalAntenna.Longitude,
                 directionalAntenna.Altitude
             );
 
-            // Metrikleri güncelle
-            directionalAntenna.SignalStrength = signal;
-            UpdateSignalMetrics(directionalAntenna);
+            // Lock durumunda açıları değiştirme ama sinyal metriklerini güncelle
+            if (IsTargetLocked)
+            {
+                // Sadece sinyal metriklerini güncelle
+                directionalAntenna.SignalStrength = signal;
+                UpdateSignalMetrics(directionalAntenna);
+            }
+            else
+            {
+                // Normal güncelleme
+                double smoothedH = horizontalFilter.Update(targetH);
+                double smoothedV = verticalFilter.Update(targetV);
 
-            Console.WriteLine($"Directional antenna at H:{smoothedH:F1}° V:{smoothedV:F1}° Signal:{signal:F1}");
+                directionalAntenna.HorizontalAngle = smoothedH;
+                directionalAntenna.VerticalAngle = smoothedV;
+                directionalAntenna.SignalStrength = signal;
+                UpdateSignalMetrics(directionalAntenna);
+            }
         }
 
         private double CalculateDistance(double lat1, double lon1, double alt1,

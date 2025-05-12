@@ -678,26 +678,13 @@ namespace Project
 
             try
             {
-                // Update scanning antenna position
-                scanningAntenna.Latitude = antennaPosition.Lat;
-                scanningAntenna.Longitude = antennaPosition.Lng;
-                scanningAntenna.Altitude = 0;
+                // Update antenna positions
+                UpdateAntennaPositions();
 
-                // Update directional antenna position
-                directionalAntenna.Latitude = antennaPosition.Lat;
-                directionalAntenna.Longitude = antennaPosition.Lng;
-                directionalAntenna.Altitude = 0;
-
-                // Update scanning antenna using PSO with periodic reset
+                // Update scanning antenna using PSO
                 double currentRssi = antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
 
-                // If we got a good RSSI, update directional antenna
-                if (currentRssi > -85) // -85 dBm threshold for usable signal
-                {
-                    antennaController.UpdateDirectionalAntenna(directionalAntenna, scanningAntenna, airplane);
-                }
-
-                // Her durumda directional anteni güncelle
+                // Her durumda directional anteni güncelle, lock durumuna bakma
                 antennaController.UpdateDirectionalAntenna(directionalAntenna, scanningAntenna, airplane);
 
                 // Refresh UI elements
