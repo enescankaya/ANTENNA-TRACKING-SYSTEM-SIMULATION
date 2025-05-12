@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:WindowsPresentation="clr-namespace:GMap.NET.WindowsPresentation;assembly=GMap.NET.WindowsPresentation"
+        xmlns:local="clr-namespace:Project.Controls"
         Title="RSSI Antenna Tracker" Height="800" Width="1200" 
         Background="#FF1A1A1A" 
         Loaded="MainWindow_Loaded"
@@ -257,7 +258,6 @@
                     </Canvas>
                 </Canvas>
 
-                <!-- HUD Overlay -->
 
                 <!-- Toggle Panel Button -->
                 <Grid x:Name="ToggleButtonContainer" 
@@ -536,12 +536,20 @@
                       Margin="10">
 
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80" />
+                        <!-- Signal Strength için -->
                         <ColumnDefinition Width="200"/>
                         <ColumnDefinition Width="200"/>
                     </Grid.ColumnDefinitions>
 
+                    <!-- Signal Strength Indicator - Yeni pozisyon -->
+                    <local:SignalStrengthIndicator x:Name="SignalIndicator"
+                                                  Grid.Column="0"
+                                                  Height="180"
+                                                  Margin="0,0,0,0" VerticalAlignment="Center"/>
+
                     <!-- PSO Visualization Panel -->
-                    <Border Grid.Column="0"
+                    <Border Grid.Column="1"
                             Height="Auto"
                             Background="#B0000000"
                             BorderBrush="#40FFFFFF"
@@ -579,7 +587,7 @@
                     </Border>
 
                     <!-- PSO Metrics Panel -->
-                    <Border Grid.Column="1"
+                    <Border Grid.Column="2"
                             Height="Auto"
                             Background="#B0000000"
                             BorderBrush="#40FFFFFF"

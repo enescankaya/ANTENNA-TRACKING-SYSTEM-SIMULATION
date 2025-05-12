@@ -716,6 +716,11 @@ namespace Project
 
                 // PSO görselleştirmesini güncelle
                 UpdatePsoVisualization();
+
+                if (directionalAntenna != null)
+                {
+                    SignalIndicator.UpdateSignal(directionalAntenna.RSSI, directionalAntenna.SNR);
+                }
             }
             catch (Exception ex)
             {

@@ -129,6 +129,9 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Controls\SignalStrengthIndicator.xaml.cs">
+      <DependentUpon>SignalStrengthIndicator.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Services\AntennaController.cs" />
     <Compile Include="Services\ColorHelper.cs" />
     <Compile Include="Services\KalmanFilter.cs" />
@@ -138,6 +141,10 @@
     <Compile Include="Views\SplashScreen.xaml.cs">
       <DependentUpon>SplashScreen.xaml</DependentUpon>
     </Compile>
+    <Page Include="Controls\SignalStrengthIndicator.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
