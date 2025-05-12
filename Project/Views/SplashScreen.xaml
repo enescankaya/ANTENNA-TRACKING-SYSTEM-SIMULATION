@@ -1,0 +1,92 @@
+﻿<Window x:Class="Project.Views.SplashScreen"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="RSSI Antenna Tracker" 
+        Height="450" Width="800"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True">
+
+    <Window.Resources>
+        <!-- Add GlowEffect resource -->
+        <DropShadowEffect x:Key="GlowEffect" 
+                         ShadowDepth="0" 
+                         BlurRadius="8" 
+                         Color="White"/>
+    </Window.Resources>
+
+    <Border Background="#FF1A1A1A"
+            CornerRadius="20"
+            BorderBrush="#FF3D3D3D"
+            BorderThickness="1"
+            Effect="{StaticResource GlowEffect}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Logo/Icon - Daha büyük -->
+            <Image Grid.Row="1" 
+                   Source="/Photos/SIMULATION.png"
+                   Width="200" Height="200"
+                   RenderOptions.BitmapScalingMode="HighQuality"
+                   Margin="0,20"/>
+
+            <!-- App Title -->
+            <TextBlock Grid.Row="2"
+                      Text="RSSI ANTENNA TRACKER"
+                      FontSize="32"
+                      FontWeight="Bold"
+                      Foreground="#FF00FF00"
+                      HorizontalAlignment="Center"
+                      Margin="0,0,0,30"/>
+
+            <!-- Loading Progress -->
+            <StackPanel Grid.Row="3" 
+                       Margin="40,0">
+                <Grid>
+                    <ProgressBar x:Name="LoadingBar"
+                                Height="4"
+                                Background="#FF2D2D2D"
+                                Foreground="#FF00FF00"
+                                Maximum="100"/>
+
+                    <TextBlock x:Name="LoadingText"
+                              Text="Initializing..."
+                              Foreground="#FF808080"
+                              HorizontalAlignment="Center"
+                              Margin="0,15,0,0"/>
+                </Grid>
+            </StackPanel>
+
+            <!-- Credits -->
+            <StackPanel Grid.Row="4" 
+                       Margin="0,40,0,30">
+                <TextBlock Text="Developed by"
+                          FontSize="14"
+                          Foreground="#FFA0A0A0"
+                          HorizontalAlignment="Center"/>
+
+                <TextBlock Margin="0,10,0,0"
+                          HorizontalAlignment="Center">
+                    <Run Text="Enes Çankaya" FontWeight="SemiBold" Foreground="White"/>
+                    <Run Text=" &amp; " Foreground="#FF808080"/>
+                    <Run Text="Furkan Düzen" FontWeight="SemiBold" Foreground="White"/>
+                </TextBlock>
+
+                <TextBlock Text="© 2023 All Rights Reserved"
+                          FontSize="12"
+                          Foreground="#FF606060"
+                          HorizontalAlignment="Center"
+                          Margin="0,20,0,0"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
