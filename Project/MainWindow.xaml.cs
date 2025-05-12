@@ -707,6 +707,9 @@ namespace Project
                     UpdateMap();
                     UpdateRadarPosition();
                 }, DispatcherPriority.Render);
+
+                // PSO görselleştirmesini güncelle
+                UpdatePsoVisualization();
             }
             catch (Exception ex)
             {
@@ -1401,6 +1404,168 @@ namespace Project
                     Canvas.SetTop(text, 100 - i * 20);
                     AltitudeTape.Children.Add(text);
                 }
+            }
+        }
+
+        private void UpdatePsoVisualization()
+        {
+            try
+            {
+                PsoVisualizationCanvas.Children.Clear();
+
+                // Grid çizgilerini çiz
+                for (int i = 1; i < 4; i++)
+                {
+                    var horizontalLine = new Line
+                    {
+                        X1 = 0,
+                        X2 = 280,
+                        Y1 = i * 70,
+                        Y2 = i * 70,
+                        Stroke = new SolidColorBrush(Color.FromArgb(32, 255, 255, 255)),
+                        StrokeThickness = 1,
+                        StrokeDashArray = new DoubleCollection { 4, 4 }
+                    };
+                    PsoVisualizationCanvas.Children.Add(horizontalLine);
+
+                    var verticalLine = new Line
+                    {
+                        X1 = i * 70,
+                        X2 = i * 70,
+                        Y1 = 0,
+                        Y2 = 280,
+                        Stroke = new SolidColorBrush(Color.FromArgb(32, 255, 255, 255)),
+                        StrokeThickness = 1,
+                        StrokeDashArray = new DoubleCollection { 4, 4 }
+                    };
+                    PsoVisualizationCanvas.Children.Add(verticalLine);
+                }
+
+                // PSO durumunu al
+                var psoState = antennaController?.GetPsoState();
+                if (psoState == null) return;
+
+                // Koordinat dönüşümü için helper fonksiyonlar - Sınırları kontrol et
+                double ScaleH(double angle)
+                {
+                    angle = Math.Max(0, Math.Min(360, angle)); // Açıyı 0-360 arasında sınırla
+                    return (angle / 360.0) * 180; // Canvas boyutu 180x180
+                }
+
+                double ScaleV(double angle)
+                {
+                    angle = Math.Max(0, Math.Min(90, angle)); // Açıyı 0-90 arasında sınırla
+                    return (angle / 90.0) * 180; // Canvas boyutu 180x180
+                }
+
+                // Parçacıkları çiz
+                foreach (var particle in psoState.Particles)
+                {
+                    // Pozisyonları sınırlar içinde tut
+                    double x = Math.Max(3, Math.Min(177, ScaleH(particle.HorizontalPosition)));
+                    double y = Math.Max(3, Math.Min(177, ScaleV(particle.VerticalPosition)));
+
+                    // Hız vektörünü de sınırla
+                    double vx = particle.HorizontalVelocity * 0.25; // Hız etkisini azalt
+                    double vy = particle.VerticalVelocity * 0.25;
+
+                    // Hız çizgisinin bitiş noktasını sınırla
+                    double endX = Math.Max(0, Math.Min(180, x + vx));
+                    double endY = Math.Max(0, Math.Min(180, y + vy));
+
+                    var ellipse = new Ellipse
+                    {
+                        Width = 6,
+                        Height = 6,
+                        Fill = new SolidColorBrush(Colors.Yellow),
+                        Opacity = 0.8,
+                        Effect = new System.Windows.Media.Effects.DropShadowEffect
+                        {
+                            Color = Colors.Yellow,
+                            BlurRadius = 10,
+                            ShadowDepth = 0
+                        }
+                    };
+
+                    Canvas.SetLeft(ellipse, x - 3);
+                    Canvas.SetTop(ellipse, y - 3);
+
+                    var velocityLine = new Line
+                    {
+                        Stroke = new SolidColorBrush(Colors.Yellow),
+                        StrokeThickness = 1.5,
+                        Opacity = 0.6,
+                        X1 = x,
+                        Y1 = y,
+                        X2 = endX,
+                        Y2 = endY
+                    };
+
+                    PsoVisualizationCanvas.Children.Add(velocityLine);
+                    PsoVisualizationCanvas.Children.Add(ellipse);
+                }
+
+                // En iyi pozisyonu göster
+                var bestPosition = new Ellipse
+                {
+                    Width = 12,
+                    Height = 12,
+                    Fill = new SolidColorBrush(Colors.Lime),
+                    Stroke = new SolidColorBrush(Colors.White),
+                    StrokeThickness = 2,
+                    Effect = new System.Windows.Media.Effects.DropShadowEffect
+                    {
+                        Color = Colors.Lime,
+                        BlurRadius = 15,
+                        ShadowDepth = 0
+                    }
+                };
+
+                Canvas.SetLeft(bestPosition, ScaleH(psoState.BestPosition.H) - 6);
+                Canvas.SetTop(bestPosition, ScaleV(psoState.BestPosition.V) - 6);
+                PsoVisualizationCanvas.Children.Add(bestPosition);
+
+                // Metrikleri güncelle
+                BestPositionH.Text = $"{psoState.BestPosition.H:F1}°";
+                BestPositionV.Text = $"{psoState.BestPosition.V:F1}°";
+
+                // Animasyonlu convergence güncellemesi
+                var animation = new DoubleAnimation(
+                    psoState.ConvergenceRate * 100,
+                    TimeSpan.FromMilliseconds(300))
+                {
+                    EasingFunction = FindResource("EaseOutExpo") as IEasingFunction
+                };
+                ConvergenceBar.BeginAnimation(ProgressBar.ValueProperty, animation);
+
+                // Convergence değerini sistem durumundan al ve animasyonlu güncelle
+                if (antennaController != null)
+                {
+                    double convergenceValue = antennaController.ConvergenceRate * 100;
+
+                    // Progress bar animasyonu - daha yumuşak
+                    var convergenceAnimation = new DoubleAnimation(
+                        convergenceValue,
+                        TimeSpan.FromMilliseconds(500)) // Süreyi arttır
+                    {
+                        EasingFunction = new PowerEase
+                        {
+                            Power = 3,
+                            EasingMode = EasingMode.EaseOut
+                        }
+                    };
+                    ConvergenceBar.BeginAnimation(ProgressBar.ValueProperty, convergenceAnimation);
+
+                    // Metin güncellemesi
+                    ConvergenceText.Text = $"{convergenceValue:F0}%";
+                }
+
+                SearchAreaText.Text = $"H: {psoState.SearchAreaH:F1}° × V: {psoState.SearchAreaV:F1}°";
+                ParticleCountText.Text = psoState.ParticleCount.ToString();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"PSO visualization error: {ex.Message}");
             }
         }
     }

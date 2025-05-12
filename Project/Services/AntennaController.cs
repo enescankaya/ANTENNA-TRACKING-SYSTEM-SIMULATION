@@ -985,5 +985,35 @@ namespace Project.Services
             if (signalStrength > 40) return Math.Max(MIN_SCAN_AREA_H, 90.0);
             return Math.Max(MIN_SCAN_AREA_H, 180.0);
         }
+
+        public class PsoState
+        {
+            public List<(double HorizontalPosition, double VerticalPosition,
+                        double HorizontalVelocity, double VerticalVelocity)> Particles
+            { get; set; }
+            public (double H, double V) BestPosition { get; set; }
+            public double ConvergenceRate { get; set; }
+            public double SearchAreaH { get; set; }
+            public double SearchAreaV { get; set; }
+            public int ParticleCount { get; set; }
+        }
+
+        public PsoState GetPsoState()
+        {
+            return new PsoState
+            {
+                Particles = pso.GetParticles().Select(p => (
+                    p.HorizontalPosition,
+                    p.VerticalPosition,
+                    p.HorizontalVelocity,
+                    p.VerticalVelocity
+                )).ToList(),
+                BestPosition = (pso.BestHorizontalAngle, pso.BestVerticalAngle),
+                ConvergenceRate = pso.ConvergenceRate,
+                SearchAreaH = horizontalScanArea,
+                SearchAreaV = verticalScanArea,
+                ParticleCount = pso.ParticleCount
+            };
+        }
     }
 }

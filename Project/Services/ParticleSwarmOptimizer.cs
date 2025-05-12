@@ -422,6 +422,20 @@ namespace Project.Services
         }
 
         /// <summary>
+        /// Returns current state of all particles for visualization
+        /// </summary>
+        public IEnumerable<(double HorizontalPosition, double VerticalPosition,
+                           double HorizontalVelocity, double VerticalVelocity)> GetParticles()
+        {
+            return particles.Select(p => (
+                p.HorizontalPosition,
+                p.VerticalPosition,
+                p.HorizontalVelocity,
+                p.VerticalVelocity
+            ));
+        }
+
+        /// <summary>
         /// Generates a random number from a standard normal distribution using Box-Muller transform
         /// </summary>
         private double NextGaussian()
