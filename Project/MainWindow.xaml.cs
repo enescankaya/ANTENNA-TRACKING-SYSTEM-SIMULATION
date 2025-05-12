@@ -492,6 +492,8 @@ namespace Project
 
             if (isScanning)
             {
+
+
                 MapControl.Position = baseStationPosition;
                 MapControl.Zoom = 16;
                 updateTimer.Start();
@@ -504,6 +506,8 @@ namespace Project
                 hudUpdateTimer.Stop();
                 SystemStatus.Text = "System Stopped";
             }
+            // Taramayı başlatırken haritayı otomatik ortala
+            CenterMapButton_Click(null, null);
         }
 
         private void ResetButton_Click(object sender, RoutedEventArgs e)

@@ -1071,8 +1071,12 @@ namespace Project.Services
                 // Pozisyon hesaplama - merkezlenmiş ve ölçeklenmiş
                 // Yatay açıyı 360 derece üzerinden pozisyona çevir
                 double angleRadians = (particle.HorizontalPosition * Math.PI / 180.0);
-                // Dikey açıyı 0-90 yerine 30-90 aralığına sıkıştır
-                double radius = ((90 - particle.VerticalPosition) / 90.0) * (canvasWidth * 0.4);
+
+                // Dikey açıyı daha gerçekçi bir dağılım için düzenleme:
+                // - 0 derece (yatay) en dışta
+                // - 90 derece (dikey) merkezde 
+                double verticalFactor = particle.VerticalPosition / 90.0; // 0-1 arası normalize
+                double radius = canvasWidth * 0.4 * (1.0 - verticalFactor); // Dikey açı arttıkça yarıçap azalır
 
                 // Polar koordinatları kartezyen koordinatlara çevir
                 double x = centerX + radius * Math.Cos(angleRadians);
@@ -1090,7 +1094,7 @@ namespace Project.Services
                 Canvas.SetLeft(particleMarker, x - size / 2);
                 Canvas.SetTop(particleMarker, y - size / 2);
 
-                // Hız vektörü çizimi
+                // Hız vektörü çizimi (polar koordinatlara göre düzenlenmiş)
                 double velocityMagnitude = Math.Sqrt(
                     particle.HorizontalVelocity * particle.HorizontalVelocity +
                     particle.VerticalVelocity * particle.VerticalVelocity);
@@ -1098,10 +1102,12 @@ namespace Project.Services
                 if (velocityMagnitude > 0.1)
                 {
                     // Hız vektörünü polar koordinatlara göre ayarla
-                    double vx = particle.HorizontalVelocity * Math.Cos(angleRadians) -
-                               particle.VerticalVelocity * Math.Sin(angleRadians);
-                    double vy = particle.HorizontalVelocity * Math.Sin(angleRadians) +
-                               particle.VerticalVelocity * Math.Cos(angleRadians);
+                    double vx = particle.HorizontalVelocity * Math.Cos(angleRadians) * (1.0 - verticalFactor);
+                    double vy = particle.HorizontalVelocity * Math.Sin(angleRadians) * (1.0 - verticalFactor);
+
+                    // Dikey hızı da ekle
+                    vx -= particle.VerticalVelocity * Math.Sin(angleRadians) * verticalFactor;
+                    vy += particle.VerticalVelocity * Math.Cos(angleRadians) * verticalFactor;
 
                     var velocityLine = new Line
                     {
@@ -1120,9 +1126,23 @@ namespace Project.Services
                 canvas.Children.Add(particleMarker);
             }
 
-            // Eksen çizgilerini çiz
-            var axes = new Line[]
+            // Eksen çizgileri ve referans daireler
+            var gridElements = new Shape[]
             {
+                new Ellipse // Dış referans dairesi (0 derece)
+                {
+                    Width = canvasWidth * 0.8,
+                    Height = canvasWidth * 0.8,
+                    Stroke = new SolidColorBrush(Color.FromArgb(20, 255, 255, 255)),
+                    StrokeThickness = 1
+                },
+                new Ellipse // Orta referans dairesi (45 derece)
+                {
+                    Width = canvasWidth * 0.4,
+                    Height = canvasWidth * 0.4,
+                    Stroke = new SolidColorBrush(Color.FromArgb(20, 255, 255, 255)),
+                    StrokeThickness = 1
+                },
                 new Line // Yatay eksen
                 {
                     X1 = 0,
@@ -1143,10 +1163,15 @@ namespace Project.Services
                 }
             };
 
-            foreach (var axis in axes)
+            foreach (var element in gridElements)
             {
-                canvas.Children.Add(axis);
+                if (element is Ellipse ellipse)
+                {
+                    Canvas.SetLeft(ellipse, centerX - ellipse.Width / 2);
+                    Canvas.SetTop(ellipse, centerY - ellipse.Height / 2);
+                }
+                canvas.Children.Add(element);
             }
         }
     }
-}
+} 

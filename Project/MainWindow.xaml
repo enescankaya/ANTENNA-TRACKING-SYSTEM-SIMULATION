@@ -6,7 +6,10 @@
         xmlns:WindowsPresentation="clr-namespace:GMap.NET.WindowsPresentation;assembly=GMap.NET.WindowsPresentation"
         Title="RSSI Antenna Tracker" Height="800" Width="1200" 
         Background="#FF1A1A1A" 
-        Loaded="MainWindow_Loaded">
+        Loaded="MainWindow_Loaded"
+        Icon="Photos/icon.ico"
+        WindowState="Maximized"
+        WindowStyle="SingleBorderWindow">
 
     <Window.Resources>
         <!-- Yeni effect tanımı ekle -->
