@@ -272,97 +272,143 @@ namespace Project
             }
         }
 
+        private void AnimateCanvasElementPosition(UIElement element, double toLeft, double toTop, double duration = 400)
+        {
+            if (element == null) return;
+
+            var fromLeft = Canvas.GetLeft(element);
+            var fromTop = Canvas.GetTop(element);
+
+            // Create left animation
+            var leftAnimation = new DoubleAnimation
+            {
+                From = double.IsNaN(fromLeft) ? toLeft : fromLeft,
+                To = toLeft,
+                Duration = TimeSpan.FromMilliseconds(duration),
+                EasingFunction = FindResource("EaseOutExpo") as IEasingFunction
+            };
+
+            // Create top animation
+            var topAnimation = new DoubleAnimation
+            {
+                From = double.IsNaN(fromTop) ? toTop : fromTop,
+                To = toTop,
+                Duration = TimeSpan.FromMilliseconds(duration),
+                EasingFunction = FindResource("EaseOutExpo") as IEasingFunction
+            };
+
+            // Set final values for layout
+            Canvas.SetLeft(element, toLeft);
+            Canvas.SetTop(element, toTop);
+
+            // Start animations
+            element.BeginAnimation(Canvas.LeftProperty, leftAnimation);
+            element.BeginAnimation(Canvas.TopProperty, topAnimation);
+        }
+
+        private void AnimateLinePosition(Line line, double x1, double y1, double x2, double y2, double duration = 400)
+        {
+            if (line == null) return;
+
+            // Create animations for each coordinate
+            var x1Animation = new DoubleAnimation(x1, TimeSpan.FromMilliseconds(duration))
+            {
+                EasingFunction = FindResource("EaseOutExpo") as IEasingFunction
+            };
+            var y1Animation = new DoubleAnimation(y1, TimeSpan.FromMilliseconds(duration))
+            {
+                EasingFunction = FindResource("EaseOutExpo") as IEasingFunction
+            };
+            var x2Animation = new DoubleAnimation(x2, TimeSpan.FromMilliseconds(duration))
+            {
+                EasingFunction = FindResource("EaseOutExpo") as IEasingFunction
+            };
+            var y2Animation = new DoubleAnimation(y2, TimeSpan.FromMilliseconds(duration))
+            {
+                EasingFunction = FindResource("EaseOutExpo") as IEasingFunction
+            };
+
+            // Start animations
+            line.BeginAnimation(Line.X1Property, x1Animation);
+            line.BeginAnimation(Line.Y1Property, y1Animation);
+            line.BeginAnimation(Line.X2Property, x2Animation);
+            line.BeginAnimation(Line.Y2Property, y2Animation);
+        }
+
         private void UpdateMap()
         {
             try
             {
-                // Antenna position - sabit koordinat
                 GPoint antennaPoint = MapControl.FromLatLngToLocal(antennaPosition);
 
-                // Radar elemanlarını antenin etrafına yerleştir
-                if (RadarBackground != null)
-                {
-                    Canvas.SetLeft(RadarBackground, antennaPoint.X - RadarBackground.Width / 2);
-                    Canvas.SetTop(RadarBackground, antennaPoint.Y - RadarBackground.Height / 2);
-                }
+                // Animate antenna marker with smooth easing
+                AnimateCanvasElementPosition(antennaMarker,
+                    antennaPoint.X - antennaMarker.Width / 2,
+                    antennaPoint.Y - antennaMarker.Height / 2);
 
-                if (RadarGrid != null)
-                {
-                    Canvas.SetLeft(RadarGrid, antennaPoint.X - 100);
-                    Canvas.SetTop(RadarGrid, antennaPoint.Y - 100);
-                }
-
-                // Anten marker pozisyonu
-                Canvas.SetLeft(antennaMarker, antennaPoint.X - antennaMarker.Width / 2);
-                Canvas.SetTop(antennaMarker, antennaPoint.Y - antennaMarker.Height / 2);
-
-                // Uçak pozisyonunu güncelle
+                // Animate aircraft marker if available
                 if (airplane != null)
                 {
-                    GPoint planePoint = MapControl.FromLatLngToLocal(new PointLatLng(airplane.Latitude, airplane.Longitude));
-                    Canvas.SetLeft(aircraftMarker, planePoint.X - aircraftMarker.Width / 2);
-                    Canvas.SetTop(aircraftMarker, planePoint.Y - aircraftMarker.Height / 2);
+                    GPoint planePoint = MapControl.FromLatLngToLocal(
+                        new PointLatLng(airplane.Latitude, airplane.Longitude));
 
-                    // Anten-uçak arası çizgi
-                    antennaDirectionLine.X1 = antennaPoint.X;
-                    antennaDirectionLine.Y1 = antennaPoint.Y;
-                    antennaDirectionLine.X2 = planePoint.X;
-                    antennaDirectionLine.Y2 = planePoint.Y;
+                    AnimateCanvasElementPosition(aircraftMarker,
+                        planePoint.X - aircraftMarker.Width / 2,
+                        planePoint.Y - aircraftMarker.Height / 2);
+
+                    // Animate antenna direction line
+                    AnimateLinePosition(antennaDirectionLine,
+                        antennaPoint.X, antennaPoint.Y,
+                        planePoint.X, planePoint.Y);
                 }
 
-                // Tarama anteni çizgisi (yeşil)
-                Line scanningLine = MapCanvas.Children.OfType<Line>().FirstOrDefault(l => l.Stroke == Brushes.Green);
-                if (scanningLine != null && scanningAntenna != null)
+                // Update radar elements with animations
+                if (RadarBackground != null)
                 {
-                    // 90 derece farkı düzeltmek için açıdan 90 çıkarıyoruz
-                    double scanAngleRad = (scanningAntenna.HorizontalAngle - 90) * Math.PI / 180;
-                    double scanV = scanningAntenna.VerticalAngle;
-                    double length = 100 + 20 * (scanV / 90.0);
-                    scanningLine.X1 = antennaPoint.X;
-                    scanningLine.Y1 = antennaPoint.Y;
-                    scanningLine.X2 = antennaPoint.X + length * Math.Cos(scanAngleRad);
-                    scanningLine.Y2 = antennaPoint.Y + length * Math.Sin(scanAngleRad);
-                    scanningLine.StrokeThickness = 4;
-
-                    // Uçta küçük yeşil daire
-                    Ellipse scanTip = MapCanvas.Children.OfType<Ellipse>().FirstOrDefault(e => e.Tag as string == "ScanTip");
-                    if (scanTip == null)
-                    {
-                        scanTip = new Ellipse { Width = 10, Height = 10, Fill = Brushes.Green, Tag = "ScanTip" };
-                        MapCanvas.Children.Add(scanTip);
-                    }
-                    Canvas.SetLeft(scanTip, scanningLine.X2 - 5);
-                    Canvas.SetTop(scanTip, scanningLine.Y2 - 5);
+                    AnimateCanvasElementPosition(RadarBackground,
+                        antennaPoint.X - RadarBackground.Width / 2,
+                        antennaPoint.Y - RadarBackground.Height / 2);
                 }
 
-                // Yönlenme anteni çizgisi (mavi)
-                Line directionalLine = MapCanvas.Children.OfType<Line>().FirstOrDefault(l => l.Stroke == Brushes.Blue);
-                if (directionalLine != null && directionalAntenna != null)
-                {
-                    // 90 derece farkı düzeltmek için açıdan 90 çıkarıyoruz
-                    double dirAngleRad = (directionalAntenna.HorizontalAngle - 90) * Math.PI / 180;
-                    double dirV = directionalAntenna.VerticalAngle;
-                    double length = 160 + 40 * (dirV / 90.0);
-                    directionalLine.X1 = antennaPoint.X;
-                    directionalLine.Y1 = antennaPoint.Y;
-                    directionalLine.X2 = antennaPoint.X + length * Math.Cos(dirAngleRad);
-                    directionalLine.Y2 = antennaPoint.Y + length * Math.Sin(dirAngleRad);
-                    directionalLine.StrokeThickness = 2;
-
-                    // Uçta küçük mavi daire
-                    Ellipse dirTip = MapCanvas.Children.OfType<Ellipse>().FirstOrDefault(e => e.Tag as string == "DirTip");
-                    if (dirTip == null)
-                    {
-                        dirTip = new Ellipse { Width = 10, Height = 10, Fill = Brushes.Blue, Tag = "DirTip" };
-                        MapCanvas.Children.Add(dirTip);
-                    }
-                    Canvas.SetLeft(dirTip, directionalLine.X2 - 5);
-                    Canvas.SetTop(dirTip, directionalLine.Y2 - 5);
-                }
+                // Update scanning and directional antenna lines with smooth animations
+                UpdateAntennaLines(antennaPoint);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"UpdateMap error: {ex.Message}");
+            }
+        }
+
+        private void UpdateAntennaLines(GPoint antennaPoint)
+        {
+            // Update scanning antenna line
+            Line scanningLine = MapCanvas.Children.OfType<Line>()
+                .FirstOrDefault(l => l.Stroke == Brushes.Green);
+            if (scanningLine != null && scanningAntenna != null)
+            {
+                double scanAngleRad = (scanningAntenna.HorizontalAngle - 90) * Math.PI / 180;
+                double scanV = scanningAntenna.VerticalAngle;
+                double length = 100 + 20 * (scanV / 90.0);
+
+                AnimateLinePosition(scanningLine,
+                    antennaPoint.X, antennaPoint.Y,
+                    antennaPoint.X + length * Math.Cos(scanAngleRad),
+                    antennaPoint.Y + length * Math.Sin(scanAngleRad));
+            }
+
+            // Update directional antenna line
+            Line directionalLine = MapCanvas.Children.OfType<Line>()
+                .FirstOrDefault(l => l.Stroke == Brushes.Blue);
+            if (directionalLine != null && directionalAntenna != null)
+            {
+                double dirAngleRad = (directionalAntenna.HorizontalAngle - 90) * Math.PI / 180;
+                double dirV = directionalAntenna.VerticalAngle;
+                double length = 160 + 40 * (dirV / 90.0);
+
+                AnimateLinePosition(directionalLine,
+                    antennaPoint.X, antennaPoint.Y,
+                    antennaPoint.X + length * Math.Cos(dirAngleRad),
+                    antennaPoint.Y + length * Math.Sin(dirAngleRad));
             }
         }
 
@@ -613,6 +659,9 @@ namespace Project
                     antennaController.UpdateDirectionalAntenna(directionalAntenna, scanningAntenna, airplane);
                 }
 
+                // Her durumda directional anteni güncelle
+                antennaController.UpdateDirectionalAntenna(directionalAntenna, scanningAntenna, airplane);
+
                 // Refresh UI elements
                 await Dispatcher.InvokeAsync(() =>
                 {
@@ -666,29 +715,45 @@ namespace Project
             antennaController.UpdateDirectionalAntenna(directionalAntenna, scanningAntenna, airplane);
         }
 
+        private void AnimateProgressBar(ProgressBar bar, double newValue)
+        {
+            // Using exponential ease out for smoother animation
+            DoubleAnimation animation = new DoubleAnimation
+            {
+                To = newValue,
+                Duration = TimeSpan.FromMilliseconds(400), // Slightly longer duration
+                EasingFunction = FindResource("EaseOutExpo") as IEasingFunction
+            };
+            bar.BeginAnimation(ProgressBar.ValueProperty, animation);
+        }
+
         private void UpdateAntennaDisplay()
         {
             Dispatcher.Invoke(() =>
             {
                 try
                 {
-                    // Scanning antenna
                     if (scanningAntenna != null)
                     {
                         ScanHAngle.Text = $"{scanningAntenna.HorizontalAngle:F1}°";
                         ScanVAngle.Text = $"{scanningAntenna.VerticalAngle:F1}°";
                         SignalStrength.Text = $"RSSI: {scanningAntenna.RSSI:F1} dBm\nSNR: {scanningAntenna.SNR:F1} dB";
-                        ScanSignalBar.Value = scanningAntenna.SignalStrength;
+
+                        // Scanning Antenna için dinamik scan area güncelleme
                         ScanAreaSize.Text = $"Scan Area: {antennaController.CurrentScanArea:F1}°";
+
+                        AnimateProgressBar(ScanSignalBar, scanningAntenna.SignalStrength);
                     }
 
-                    // Directional antenna
                     if (directionalAntenna != null)
                     {
                         DirHAngle.Text = $"{directionalAntenna.HorizontalAngle:F1}°";
                         DirVAngle.Text = $"{directionalAntenna.VerticalAngle:F1}°";
-                        DirSignalBar.Value = directionalAntenna.SignalStrength;
-                        DirSignalText.Text = $"RSSI: {directionalAntenna.RSSI:F1} dBm\nSNR: {directionalAntenna.SNR:F1} dB";
+
+                        // Lock durumunda da RSSI ve SNR değerlerini güncelle
+                        DirRssiValue.Text = $"{directionalAntenna.RSSI:F1}";
+                        DirSnrValue.Text = $"{directionalAntenna.SNR:F1}";
+                        AnimateProgressBar(DirSignalBar, directionalAntenna.SignalStrength);
                     }
 
                     // Update radar display
@@ -701,12 +766,91 @@ namespace Project
 
                     SystemStatus.Text = $"{status} | Scan Area: {antennaController.CurrentScanArea:F1}°";
                     StatusMessage.Text = $"Scanning: RSSI={scanningAntenna?.RSSI:F1}dBm | Tracking: RSSI={directionalAntenna?.RSSI:F1}dBm";
+
+                    // Animate signal bars
+                    AnimateProgressBar(ScanSignalBar, scanningAntenna?.SignalStrength ?? 0);
+                    AnimateProgressBar(DirSignalBar, directionalAntenna?.SignalStrength ?? 0);
+
+                    // Update lock indicator
+                    bool isLocked = antennaController?.IsTargetLocked ?? false;
+                    UpdateLockIndicator(isLocked);
                 }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"UpdateAntennaDisplay error: {ex.Message}");
                 }
             });
+        }
+
+        private void UpdateRadarDisplay()
+        {
+            if (RadarSweep != null && scanningAntenna != null)
+            {
+                // Radar sweep rotation with animation
+                if (sweepRotation != null)
+                {
+                    DoubleAnimation rotateAnim = new DoubleAnimation
+                    {
+                        To = scanningAntenna.HorizontalAngle,
+                        Duration = TimeSpan.FromMilliseconds(400),
+                        EasingFunction = FindResource("EaseOutExpo") as IEasingFunction
+                    };
+                    sweepRotation.BeginAnimation(RotateTransform.AngleProperty, rotateAnim);
+                }
+
+                // Signal strength-based color and opacity animation
+                byte targetAlpha = (byte)(scanningAntenna.SignalStrength * 1.5);
+                Color targetColor = Color.FromArgb(targetAlpha, 0, 255, 0);
+
+                SolidColorBrush currentBrush = RadarSweep.Fill as SolidColorBrush;
+                if (currentBrush == null || currentBrush.Color != targetColor)
+                {
+                    ColorAnimation colorAnim = new ColorAnimation
+                    {
+                        To = targetColor,
+                        Duration = TimeSpan.FromMilliseconds(400),
+                        EasingFunction = FindResource("EaseOutExpo") as IEasingFunction
+                    };
+                    if (currentBrush == null)
+                    {
+                        currentBrush = new SolidColorBrush(targetColor);
+                        RadarSweep.Fill = currentBrush;
+                    }
+                    currentBrush.BeginAnimation(SolidColorBrush.ColorProperty, colorAnim);
+                }
+            }
+
+            // Signal bar güncelleme
+            if (ScanSignalBar != null)
+            {
+                ScanSignalBar.Value = scanningAntenna?.SignalStrength ?? 0;
+            }
+        }
+
+        private void UpdateLockIndicator(bool isLocked)
+        {
+            if (LockIndicator == null || LockStatusText == null) return;
+
+            Color targetColor = isLocked ? Colors.LimeGreen : Colors.Red;
+            string statusText = isLocked ? "Locked" : "Unlocked";
+
+            ColorAnimation colorAnim = new ColorAnimation
+            {
+                To = targetColor,
+                Duration = TimeSpan.FromMilliseconds(200)
+            };
+
+            if (LockIndicator.Fill is SolidColorBrush brush)
+            {
+                brush.BeginAnimation(SolidColorBrush.ColorProperty, colorAnim);
+            }
+            else
+            {
+                LockIndicator.Fill = new SolidColorBrush(targetColor);
+            }
+
+            LockStatusText.Text = statusText;
+            LockStatusText.Foreground = new SolidColorBrush(isLocked ? Colors.LimeGreen : Colors.Red);
         }
 
         private void InitializeMap()
@@ -939,31 +1083,6 @@ namespace Project
             UpdateRadarPosition();
         }
 
-        private void UpdateRadarDisplay()
-        {
-            if (RadarSweep != null && scanningAntenna != null)
-            {
-                // Radar sweep rotation güncelleme
-                if (sweepRotation != null)
-                {
-                    sweepRotation.Angle = scanningAntenna.HorizontalAngle;
-
-                    // Sinyal gücüne göre radar renk ve opaklık ayarı
-                    byte alpha = (byte)(scanningAntenna.SignalStrength * 1.5);
-                    var gradientBrush = new RadialGradientBrush();
-                    gradientBrush.GradientStops.Add(new GradientStop(Color.FromArgb(alpha, 0, 255, 0), 0));
-                    gradientBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 255, 0), 1));
-                    RadarSweep.Fill = gradientBrush;
-                }
-            }
-
-            // Signal bar güncelleme
-            if (ScanSignalBar != null)
-            {
-                ScanSignalBar.Value = scanningAntenna?.SignalStrength ?? 0;
-            }
-        }
-
         private void NumberValidationTextBox(object sender, TextCompositionEventArgs e)
         {
             e.Handled = !IsTextAllowed(e.Text);
@@ -1153,7 +1272,7 @@ namespace Project
                 PsoInfo.Text = $"PSO Iterations: {antennaController?.PsoIteration ?? 0}";
                 ConvergenceInfo.Text = $"Conv: {(antennaController?.ConvergenceRate * 100):F0}%";
                 SearchAreaInfo.Text = $"Area: {(antennaController?.CurrentScanArea ?? 360):F0}°";
-                TargetLockInfo.Text = $"Lock: {(antennaController?.IsTargetLocked ?? false ? "Yes" : "No")}";
+                LockStatusText.Text = antennaController?.IsTargetLocked ?? false ? "Locked" : "Unlocked";
             }
             catch (Exception ex)
             {

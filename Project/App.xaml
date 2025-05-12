@@ -4,6 +4,18 @@
              xmlns:local="clr-namespace:Project"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
+        <!-- Add at the top of existing resources -->
+        <ExponentialEase x:Key="EaseOutExpo" EasingMode="EaseOut"/>
+
+        <!-- Common Colors -->
+        <SolidColorBrush x:Key="PrimaryBackground" Color="#FF1E1E1E"/>
+        <SolidColorBrush x:Key="SecondaryBackground" Color="#FF2D2D2D"/>
+        <SolidColorBrush x:Key="AccentBackground" Color="#FF3D3D3D"/>
+        <SolidColorBrush x:Key="TextForeground" Color="White"/>
+
+        <!-- Easing Functions - Moved to top -->
+        <CubicEase x:Key="EaseInOutCubic" EasingMode="EaseInOut"/>
+
         <!-- Modern Button Style -->
         <Style x:Key="ModernButton" TargetType="Button">
             <Setter Property="Background" Value="#FF3D3D3D"/>
@@ -39,12 +51,6 @@
             </Setter>
         </Style>
 
-        <!-- Common Colors -->
-        <SolidColorBrush x:Key="PrimaryBackground" Color="#FF1E1E1E"/>
-        <SolidColorBrush x:Key="SecondaryBackground" Color="#FF2D2D2D"/>
-        <SolidColorBrush x:Key="AccentBackground" Color="#FF3D3D3D"/>
-        <SolidColorBrush x:Key="TextForeground" Color="White"/>
-
         <!-- Text Block Style -->
         <Style TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource TextForeground}"/>
@@ -58,6 +64,78 @@
             <Setter Property="BorderBrush" Value="#FF4D4D4D"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="5,3"/>
+        </Style>
+
+        <!-- Base Signal Strength Bar Style -->
+        <Style x:Key="SignalStrengthBarStyle" TargetType="ProgressBar">
+            <Setter Property="Height" Value="4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid>
+                            <Border Background="#FF2D2D2D" 
+                                    CornerRadius="2"/>
+                            <Border x:Name="PART_Indicator" 
+                                    Background="{TemplateBinding Foreground}"
+                                    CornerRadius="2"
+                                    HorizontalAlignment="Left">
+                                <Border.Effect>
+                                    <DropShadowEffect ShadowDepth="0" 
+                                                    BlurRadius="10" 
+                                                    Color="{Binding Background.Color, ElementName=PART_Indicator}"/>
+                                </Border.Effect>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Signal Bar Animation Style -->
+        <Style x:Key="AnimatedSignalBarStyle" TargetType="ProgressBar" BasedOn="{StaticResource SignalStrengthBarStyle}">
+            <Style.Triggers>
+                <EventTrigger RoutedEvent="ProgressBar.Loaded">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="Value"
+                                           Duration="0:0:0.3"
+                                           EasingFunction="{StaticResource EaseOutExpo}"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Lock Indicator Style -->
+        <Style x:Key="LockIndicatorStyle" TargetType="Ellipse">
+            <Setter Property="Width" Value="12"/>
+            <Setter Property="Height" Value="12"/>
+            <Setter Property="Stroke" Value="#40FFFFFF"/>
+            <Setter Property="StrokeThickness" Value="1"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsLocked}" Value="True">
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <ColorAnimation Storyboard.TargetProperty="(Ellipse.Fill).(SolidColorBrush.Color)"
+                                              To="#00FF00" Duration="0:0:0.2"/>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                              To="1" Duration="0:0:0.2"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                    <DataTrigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <ColorAnimation Storyboard.TargetProperty="(Ellipse.Fill).(SolidColorBrush.Color)"
+                                              To="#FF4D4D4D" Duration="0:0:0.2"/>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                              To="0.5" Duration="0:0:0.2"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.ExitActions>
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
     </Application.Resources>
 </Application>

@@ -9,6 +9,12 @@
         Loaded="MainWindow_Loaded">
 
     <Window.Resources>
+        <!-- Yeni effect tanımı ekle -->
+        <DropShadowEffect x:Key="GlowEffect" 
+                         ShadowDepth="0" 
+                         BlurRadius="8" 
+                         Color="White"/>
+
         <!-- Improved Modern Button Style -->
         <Style x:Key="ModernButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="#FF2D2D2D"/>
@@ -218,6 +224,19 @@
                                 <BlurEffect Radius="5"/>
                             </Path.Effect>
                         </Path>
+
+                        <!-- Scanning antenna line - kalınlık ve opaklık arttırıldı -->
+                        <Line Stroke="#FF00FF00" 
+                              StrokeThickness="4" 
+                              Opacity="0.9"
+                              Effect="{StaticResource GlowEffect}"
+                              StrokeDashArray="6,2"/>
+
+                        <!-- Directional antenna line -->
+                        <Line Stroke="#FF00A0FF"
+                              StrokeThickness="3"
+                              Opacity="0.8"
+                              Effect="{StaticResource GlowEffect}"/>
                     </Canvas>
 
                     <!-- Controls Canvas -->
@@ -602,7 +621,19 @@
                                            Grid.Row="1"
                                            Style="{StaticResource SignalStrengthBarStyle}"
                                            Foreground="#FF00FF00"
-                                           Maximum="100"/>
+                                           Maximum="100">
+                                    <ProgressBar.Triggers>
+                                        <EventTrigger RoutedEvent="ProgressBar.ValueChanged">
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetProperty="Value"
+                                                                   Duration="0:0:0.3"
+                                                                   EasingFunction="{StaticResource EaseOutExpo}"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </ProgressBar.Triggers>
+                                </ProgressBar>
 
                                 <TextBlock x:Name="SignalStrength" 
                                          Grid.Row="2"
@@ -689,10 +720,17 @@
 
                                 <TextBlock x:Name="DirSignalText" 
                                          Grid.Row="2"
-                                         Text="0%"
                                          FontSize="20"
                                          FontWeight="SemiBold"
-                                         Foreground="#FF00A0FF"/>
+                                         Foreground="#FF00A0FF">
+                                    <Run Text="RSSI: "/>
+                                    <Run x:Name="DirRssiValue" Text="-120.0"/>
+                                    <Run Text=" dBm"/>
+                                    <LineBreak/>
+                                    <Run Text="SNR: "/>
+                                    <Run x:Name="DirSnrValue" Text="0.0"/>
+                                    <Run Text=" dB"/>
+                                </TextBlock>
                             </Grid>
 
                             <!-- Angles Display -->
@@ -864,10 +902,17 @@
                                                      Foreground="#FFA0A0A0"
                                                      Margin="0,5,0,0"/>
 
-                                            <TextBlock x:Name="TargetLockInfo" 
-                                                     Text="Lock: No"
-                                                     Foreground="#FFA0A0A0"
-                                                     Margin="0,5,0,0"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                                <TextBlock Text="Lock Status: " 
+                                                         Foreground="#FFA0A0A0"/>
+                                                <Ellipse x:Name="LockIndicator"
+                                                        Style="{StaticResource LockIndicatorStyle}"
+                                                        Margin="5,0,0,0"/>
+                                                <TextBlock x:Name="LockStatusText"
+                                                         Text="Unlocked"
+                                                         Foreground="#FFA0A0A0"
+                                                         Margin="5,0,0,0"/>
+                                            </StackPanel>
                                         </StackPanel>
                                     </Border>
                                 </StackPanel>
