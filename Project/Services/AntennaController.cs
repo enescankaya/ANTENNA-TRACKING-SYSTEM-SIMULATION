@@ -85,7 +85,6 @@ namespace Project.Services
         private double horizontalScanArea = INITIAL_SCAN_AREA_H;
         private double verticalScanArea = INITIAL_SCAN_AREA_V;
         private int scanPhaseDegrees = 0;
-        private bool targetLocked = false;
         private string currentScanMode = "Initial Scan";
 
         // Exploration fazı için ek değişkenler
@@ -109,12 +108,6 @@ namespace Project.Services
 
         // Sabitler - Ani sapmaları önlemek için
         private const double MAX_ANGLE_CHANGE = 30.0;  // Bir adımda maksimum açı değişimi
-        private const double SIGNAL_STABILITY_THRESHOLD = 5.0; // Sinyal kararlılık eşiği
-        private const int STABLE_SIGNAL_COUNT = 3; // Kararlı sinyal sayısı
-        private readonly Queue<double> recentSignals = new Queue<double>();
-        private double lastValidHorizontalAngle = 0;
-        private double lastValidVerticalAngle = 0;
-        private bool hasValidPosition = false;
 
         // Public properties for UI display and monitoring
         public bool IsInitialScan => isInitialScan;
@@ -130,7 +123,6 @@ namespace Project.Services
         public double PredictedHorizontalAngle => predictedHorizontalAngle;
         public double PredictedVerticalAngle => predictedVerticalAngle;
         public int ScanPhase => scanPhaseDegrees;
-        public bool IsTargetLocked => targetLocked;
         public string CurrentMode => currentScanMode;
         public double ConvergenceRate => pso?.ConvergenceRate ?? 0;
         public double SearchRadius => pso?.SearchRadius ?? 180.0;
@@ -187,17 +179,13 @@ namespace Project.Services
                 double realSignal = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
 
                 // Sinyal eşiklerini kontrol et
-                if (realSignal > TRACKING_THRESHOLD * 0.85 && !targetLocked)
+                if (realSignal > TRACKING_THRESHOLD * 0.85)
                 {
-                    // Signal Acquisition -> Target Tracking geçişini kolaylaştır
-                    targetLocked = true;
                     currentScanMode = "Target Tracking";
                     bestSignalStrength = realSignal;
                 }
-                else if (realSignal < SIGNAL_LOSS_THRESHOLD * 1.2 && targetLocked)
+                else if (realSignal < SIGNAL_LOSS_THRESHOLD * 1.2)
                 {
-                    // Target Tracking -> Signal Acquisition geçişini hızlandır
-                    targetLocked = false;
                     currentScanMode = "Signal Re-Acquisition";
                     bestSignalStrength = realSignal;
 
@@ -250,13 +238,11 @@ namespace Project.Services
             else if (bestSignalStrength < SIGNAL_LOSS_THRESHOLD)
             {
                 currentScanMode = "Wide Area Search";
-                targetLocked = false;
                 PerformWideAreaSearch(antenna, airplane, antennaLat, antennaLon, antennaAlt, lastKnownTargetH, lastKnownTargetV);
             }
-            else if (!targetLocked || bestSignalStrength < TRACKING_THRESHOLD)
+            else if (bestSignalStrength < TRACKING_THRESHOLD)
             {
                 currentScanMode = "Signal Acquisition";
-                targetLocked = false;
                 PerformSignalAcquisition(antenna, airplane, antennaLat, antennaLon, antennaAlt, lastKnownTargetH, lastKnownTargetV);
             }
             else
@@ -475,37 +461,31 @@ namespace Project.Services
         {
             if (airplane == null) return;
 
-            // Her zaman güncel hedef açılarını hesapla
-            GetTargetAngles(directionalAntenna.Latitude, directionalAntenna.Longitude, directionalAntenna.Altitude,
-                           airplane, out double targetH, out double targetV);
+            // Direkt olarak en iyi konumu kullan
+            double targetH = bestHorizontalAngle;
+            double targetV = bestVerticalAngle;
 
-            // Lock durumunda da sinyal gücünü hesapla
+            // Kalman filtresi ile yumuşat
+            double smoothedH = horizontalFilter.Update(targetH);
+            double smoothedV = verticalFilter.Update(targetV);
+
+            // Anteni yönlendir
+            directionalAntenna.HorizontalAngle = smoothedH;
+            directionalAntenna.VerticalAngle = smoothedV;
+
+            // Sinyal gücünü hesapla
             double signal = SimulateSignalStrength(
-                directionalAntenna,
-                airplane,
+                directionalAntenna, airplane,
                 directionalAntenna.Latitude,
                 directionalAntenna.Longitude,
                 directionalAntenna.Altitude
             );
 
-            // Lock durumunda açıları değiştirme ama sinyal metriklerini güncelle
-            if (IsTargetLocked)
-            {
-                // Sadece sinyal metriklerini güncelle
-                directionalAntenna.SignalStrength = signal;
-                UpdateSignalMetrics(directionalAntenna);
-            }
-            else
-            {
-                // Normal güncelleme
-                double smoothedH = horizontalFilter.Update(targetH);
-                double smoothedV = verticalFilter.Update(targetV);
+            // Metrikleri güncelle
+            directionalAntenna.SignalStrength = signal;
+            UpdateSignalMetrics(directionalAntenna);
 
-                directionalAntenna.HorizontalAngle = smoothedH;
-                directionalAntenna.VerticalAngle = smoothedV;
-                directionalAntenna.SignalStrength = signal;
-                UpdateSignalMetrics(directionalAntenna);
-            }
+            Console.WriteLine($"Directional antenna at H:{smoothedH:F1}° V:{smoothedV:F1}° Signal:{signal:F1}");
         }
 
         private double CalculateDistance(double lat1, double lon1, double alt1,
@@ -729,8 +709,6 @@ namespace Project.Services
                         // Düzeltme 10: İyi sinyal bulunduğunda modlar arası geçişi kolaylaştır
                         if (signalStrength > TRACKING_THRESHOLD * 0.9)
                         {
-                            // Tracking moduna geçmeye hazırız
-                            targetLocked = true;
                             currentScanMode = "Target Tracking";
                         }
                     }
@@ -761,7 +739,6 @@ namespace Project.Services
                 // Düzeltme 13: İyi bir sinyal bulunduysa tracking moduna geçmeyi zorla
                 if (currentSignal > TRACKING_THRESHOLD * 0.8)
                 {
-                    targetLocked = true;
                     currentScanMode = "Target Tracking";
                 }
             }
@@ -785,16 +762,6 @@ namespace Project.Services
                                         double antennaLat, double antennaLon, double antennaAlt,
                                         double targetH, double targetV)
         {
-            // Sinyal kararlılığını kontrol et
-            if (recentSignals.Count >= STABLE_SIGNAL_COUNT)
-            {
-                recentSignals.Dequeue();
-            }
-            recentSignals.Enqueue(bestSignalStrength);
-
-            bool isSignalStable = recentSignals.Count == STABLE_SIGNAL_COUNT &&
-                                 recentSignals.Max() - recentSignals.Min() < SIGNAL_STABILITY_THRESHOLD;
-
             // Gerçek sinyal gücünü ölç
             double realSignalStrength = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
 
@@ -816,13 +783,6 @@ namespace Project.Services
 
                 lastKnownTargetH = targetH;
                 lastKnownTargetV = targetV;
-
-                if (!hasValidPosition)
-                {
-                    lastValidHorizontalAngle = antenna.HorizontalAngle;
-                    lastValidVerticalAngle = antenna.VerticalAngle;
-                    hasValidPosition = true;
-                }
             }
 
             // PSO güncellemesi için zaman kontrolü
@@ -830,34 +790,16 @@ namespace Project.Services
             {
                 lastPsoUpdate = DateTime.Now;
 
-                // Kararlı sinyalde ani değişimleri engelle
-                if (isSignalStable && hasValidPosition)
-                {
-                    double maxChange = MAX_ANGLE_CHANGE * 0.5; // Kararlı durumda daha yavaş hareket
-                    targetH = ClampAngleChange(lastValidHorizontalAngle, targetH, maxChange);
-                    targetV = ClampAngleChange(lastValidVerticalAngle, targetV, maxChange);
-                }
-
                 // Fitness fonksiyonunu güncelle
                 Func<double, double, double> trackingFitnessFunc = (h, v) =>
                 {
-                    // Mevcut konumdan çok uzaklaşmayı cezalandır
-                    double anglePenalty = 0;
-                    if (hasValidPosition)
-                    {
-                        double hDiff = Math.Abs(GetAngleDifference(h, lastValidHorizontalAngle));
-                        double vDiff = Math.Abs(v - lastValidVerticalAngle);
-                        anglePenalty = (hDiff + vDiff) * 0.1; // Uzaklaştıkça artan ceza
-                    }
-
                     antenna.HorizontalAngle = h;
                     antenna.VerticalAngle = v;
 
                     double signal = SimulateSignalStrength(antenna, airplane, antennaLat, antennaLon, antennaAlt);
                     signal = signalFilter.Update(signal);
 
-                    // Ceza puanını uygula
-                    return Math.Max(0, signal - anglePenalty);
+                    return Math.Max(0, signal);
                 };
 
                 // PSO güncellemesi
@@ -872,14 +814,6 @@ namespace Project.Services
                     predictedVerticalAngle
                 );
 
-                // Yeni konum geçerliyse kaydet
-                if (realSignalStrength > TRACKING_THRESHOLD * 0.8)
-                {
-                    lastValidHorizontalAngle = antenna.HorizontalAngle;
-                    lastValidVerticalAngle = antenna.VerticalAngle;
-                    hasValidPosition = true;
-                }
-
                 // Kalman filtreleme
                 double filteredH = horizontalFilter.Update(optH);
                 double filteredV = verticalFilter.Update(optV);
@@ -892,17 +826,6 @@ namespace Project.Services
                 UpdatePositionHistory(bestHorizontalAngle, bestVerticalAngle);
                 PredictTargetMovement();
             }
-        }
-
-        // Açı değişimini sınırlayan yardımcı metod
-        private double ClampAngleChange(double current, double target, double maxChange)
-        {
-            double diff = GetAngleDifference(target, current);
-            if (Math.Abs(diff) > maxChange)
-            {
-                return (current + Math.Sign(diff) * maxChange + 360.0) % 360.0;
-            }
-            return target;
         }
 
         // İki açı arasındaki en kısa farkı hesaplayan yardımcı metod
@@ -1022,7 +945,6 @@ namespace Project.Services
             positionHistory.Clear();
 
             // Reset tracking state
-            targetLocked = false;
             currentScanMode = "Initial Scan";
             scanPhaseDegrees = 0;
 
@@ -1035,12 +957,6 @@ namespace Project.Services
             isExplorationPhase = true;
             explorationElapsed = 0;
             explorationAngle = 0;
-
-            // Reset signal stability tracking
-            recentSignals.Clear();
-            hasValidPosition = false;
-            lastValidHorizontalAngle = 0;
-            lastValidVerticalAngle = 0;
         }
 
         /// <summary>
@@ -1056,8 +972,7 @@ namespace Project.Services
                    $"Velocity: H={horizontalVelocity:F2}°/s V={verticalVelocity:F2}°/s\n" +
                    $"Scan Area: H={horizontalScanArea:F1}° V={verticalScanArea:F1}°\n" +
                    $"PSO Iteration: {PsoIteration}\n" +
-                   $"Convergence: {ConvergenceRate:P2}\n" +
-                   $"Locked: {targetLocked}";
+                   $"Convergence: {ConvergenceRate:P2}";
         }
 
         /// <summary>

@@ -678,13 +678,26 @@ namespace Project
 
             try
             {
-                // Update antenna positions
-                UpdateAntennaPositions();
+                // Update scanning antenna position
+                scanningAntenna.Latitude = antennaPosition.Lat;
+                scanningAntenna.Longitude = antennaPosition.Lng;
+                scanningAntenna.Altitude = 0;
 
-                // Update scanning antenna using PSO
+                // Update directional antenna position
+                directionalAntenna.Latitude = antennaPosition.Lat;
+                directionalAntenna.Longitude = antennaPosition.Lng;
+                directionalAntenna.Altitude = 0;
+
+                // Update scanning antenna using PSO with periodic reset
                 double currentRssi = antennaController.UpdateScanningAntenna(scanningAntenna, airplane);
 
-                // Her durumda directional anteni güncelle, lock durumuna bakma
+                // If we got a good RSSI, update directional antenna
+                if (currentRssi > -85) // -85 dBm threshold for usable signal
+                {
+                    antennaController.UpdateDirectionalAntenna(directionalAntenna, scanningAntenna, airplane);
+                }
+
+                // Her durumda directional anteni güncelle
                 antennaController.UpdateDirectionalAntenna(directionalAntenna, scanningAntenna, airplane);
 
                 // Refresh UI elements
@@ -792,10 +805,6 @@ namespace Project
                     // Animate signal bars
                     AnimateProgressBar(ScanSignalBar, scanningAntenna?.SignalStrength ?? 0);
                     AnimateProgressBar(DirSignalBar, directionalAntenna?.SignalStrength ?? 0);
-
-                    // Update lock indicator
-                    bool isLocked = antennaController?.IsTargetLocked ?? false;
-                    UpdateLockIndicator(isLocked);
                 }
                 catch (Exception ex)
                 {
@@ -847,32 +856,6 @@ namespace Project
             {
                 ScanSignalBar.Value = scanningAntenna?.SignalStrength ?? 0;
             }
-        }
-
-        private void UpdateLockIndicator(bool isLocked)
-        {
-            if (LockIndicator == null || LockStatusText == null) return;
-
-            Color targetColor = isLocked ? Colors.LimeGreen : Colors.Red;
-            string statusText = isLocked ? "Locked" : "Unlocked";
-
-            ColorAnimation colorAnim = new ColorAnimation
-            {
-                To = targetColor,
-                Duration = TimeSpan.FromMilliseconds(200)
-            };
-
-            if (LockIndicator.Fill is SolidColorBrush brush)
-            {
-                brush.BeginAnimation(SolidColorBrush.ColorProperty, colorAnim);
-            }
-            else
-            {
-                LockIndicator.Fill = new SolidColorBrush(targetColor);
-            }
-
-            LockStatusText.Text = statusText;
-            LockStatusText.Foreground = new SolidColorBrush(isLocked ? Colors.LimeGreen : Colors.Red);
         }
 
         private void InitializeMap()
@@ -1294,7 +1277,6 @@ namespace Project
                 PsoInfo.Text = $"PSO Iterations: {antennaController?.PsoIteration ?? 0}";
                 ConvergenceInfo.Text = $"Conv: {(antennaController?.ConvergenceRate * 100):F0}%";
                 SearchAreaInfo.Text = $"Area: {(antennaController?.CurrentScanArea ?? 360):F0}°";
-                LockStatusText.Text = antennaController?.IsTargetLocked ?? false ? "Locked" : "Unlocked";
             }
             catch (Exception ex)
             {
