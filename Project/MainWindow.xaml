@@ -532,16 +532,15 @@
                       VerticalAlignment="Top"
                       Margin="10">
 
-                    <!-- İki panel yan yana yerleşim için kolonlar -->
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="200"/>
                         <ColumnDefinition Width="200"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- PSO Visualization Panel - Daha mat arka plan -->
+                    <!-- PSO Visualization Panel -->
                     <Border Grid.Column="0"
                             Height="Auto"
-                            Background="#60000000"
+                            Background="#B0000000"
                             BorderBrush="#40FFFFFF"
                             BorderThickness="1"
                             CornerRadius="8"
@@ -557,7 +556,8 @@
                             <!-- Visualization Canvas -->
                             <Canvas x:Name="PsoVisualizationCanvas" 
                                     Width="180" Height="180" 
-                                    Margin="10,40,10,10">
+                                    Margin="0,20,0,0"
+                                    ClipToBounds="True">
                                 <!-- Grid Lines -->
                                 <Rectangle Width="180" Height="180" 
                                           Stroke="#20FFFFFF" 
@@ -575,10 +575,10 @@
                         </Grid>
                     </Border>
 
-                    <!-- PSO Metrics Panel - Daha mat arka plan -->
+                    <!-- PSO Metrics Panel -->
                     <Border Grid.Column="1"
                             Height="Auto"
-                            Background="#60000000"
+                            Background="#B0000000"
                             BorderBrush="#40FFFFFF"
                             BorderThickness="1"
                             CornerRadius="8"
@@ -586,13 +586,17 @@
                             Margin="5,0,0,0">
 
                         <StackPanel Margin="10">
+                            <!-- Header -->
                             <TextBlock Text="PSO METRICS" 
                                       FontWeight="Bold" 
-                                      Foreground="#FF00FF00"/>
+                                      Foreground="#FF00FF00"
+                                      FontSize="14"/>
 
-                            <StackPanel Margin="0,10,0,0">
+                            <!-- Best Position -->
+                            <StackPanel Margin="0,15,0,0">
                                 <TextBlock Text="Best Position" 
-                                          Foreground="#FFA0A0A0"/>
+                                          Foreground="#FFA0A0A0"
+                                          FontSize="12"/>
                                 <StackPanel Orientation="Horizontal" 
                                            Margin="0,5">
                                     <TextBlock Text="H: " 
@@ -607,44 +611,46 @@
                                               Text="0°" 
                                               Foreground="#FF00FF00"/>
                                 </StackPanel>
+                            </StackPanel>
 
-                                <!-- Convergence Rate - Animasyonlu ve sistem durumundan değer alan -->
+                            <!-- Convergence Bar -->
+                            <StackPanel Margin="0,15,0,0">
                                 <TextBlock Text="Convergence Rate" 
-                                          Foreground="#FFA0A0A0" 
-                                          Margin="0,10,0,0"/>
-                                <Grid Height="20">
+                                          Foreground="#FFA0A0A0"
+                                          FontSize="12"/>
+                                <Grid Height="24" Margin="0,5,0,0">
                                     <ProgressBar x:Name="ConvergenceBar"
                                                 Height="4"
-                                                Width="150"
+                                                 Width="150"
+                                                 HorizontalAlignment="Left"
                                                 Value="0"
                                                 Maximum="100"
                                                 Style="{StaticResource SignalStrengthBarStyle}"
                                                 Foreground="#FF00FF00"
-                                                VerticalAlignment="Center"
-                                                 HorizontalAlignment="Left"/>
+                                                VerticalAlignment="Center"/>
                                     <TextBlock x:Name="ConvergenceText"
                                              Text="0%"
-                                             FontSize="10"
+                                             FontSize="12"
                                              Foreground="#FF00FF00"
-                                             HorizontalAlignment="Left"
-                                             VerticalAlignment="Top"
-                                             Margin="155,1,0,0"/>
+                                             HorizontalAlignment="Right"
+                                             VerticalAlignment="Center"
+                                            />
                                 </Grid>
-
-                                <TextBlock Text="Search Area" 
-                                          Foreground="#FFA0A0A0" 
-                                          Margin="0,10,0,0"/>
-                                <TextBlock x:Name="SearchAreaText"
-                                          Text="H: 360° × V: 90°"
-                                          Foreground="#FF00FF00"/>
-
-                                <TextBlock Text="Active Particles" 
-                                          Foreground="#FFA0A0A0" 
-                                          Margin="0,10,0,0"/>
-                                <TextBlock x:Name="ParticleCountText"
-                                          Text="0"
-                                          Foreground="#FF00FF00"/>
                             </StackPanel>
+
+                            <TextBlock Text="Search Area" 
+                                      Foreground="#FFA0A0A0" 
+                                      Margin="0,10,0,0"/>
+                            <TextBlock x:Name="SearchAreaText"
+                                      Text="H: 360° × V: 90°"
+                                      Foreground="#FF00FF00"/>
+
+                            <TextBlock Text="Active Particles" 
+                                      Foreground="#FFA0A0A0" 
+                                      Margin="0,10,0,0"/>
+                            <TextBlock x:Name="ParticleCountText"
+                                      Text="0"
+                                      Foreground="#FF00FF00"/>
                         </StackPanel>
                     </Border>
                 </Grid>
