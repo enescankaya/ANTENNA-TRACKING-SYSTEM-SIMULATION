@@ -6,7 +6,9 @@ namespace Project.Views
 {
     public partial class SplashScreen : Window
     {
-        private Random random = new Random();
+        private readonly Random random = new Random();
+        private readonly double totalDuration;
+        private readonly double progressIncrement;
         private DispatcherTimer timer;
         private double progress = 0;
         private readonly string[] loadingTexts = new[]
@@ -21,6 +23,11 @@ namespace Project.Views
         public SplashScreen()
         {
             InitializeComponent();
+
+            // 10-15 saniye arası random süre belirle
+            totalDuration = random.Next(10000, 15001); // 10000-15000 ms arası
+            progressIncrement = 100.0 / (totalDuration / 30.0); // Her tick için artış miktarı
+
             InitializeTimer();
         }
 
@@ -28,7 +35,7 @@ namespace Project.Views
         {
             timer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(30)
+                Interval = TimeSpan.FromMilliseconds(30) // Daha smooth animasyon için
             };
 
             timer.Tick += Timer_Tick;
@@ -39,7 +46,7 @@ namespace Project.Views
         {
             try
             {
-                progress += random.NextDouble() * 1.5;
+                progress += progressIncrement;
 
                 if (progress >= 100)
                 {
@@ -47,7 +54,7 @@ namespace Project.Views
                     progress = 100;
                     LoadingText.Text = "Ready to launch...";
 
-                    // Kısa bir bekleme süresi sonra kapat
+                    // Son mesajı göstermek için kısa bir bekleme
                     DispatcherTimer closeTimer = new DispatcherTimer
                     {
                         Interval = TimeSpan.FromSeconds(1)
@@ -55,23 +62,13 @@ namespace Project.Views
                     closeTimer.Tick += (s, args) =>
                     {
                         closeTimer.Stop();
-                        Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
-                        {
-                            try
-                            {
-                                Close();
-                            }
-                            catch (Exception ex)
-                            {
-                                MessageBox.Show($"Error closing splash screen: {ex.Message}");
-                            }
-                        }));
+                        Close();
                     };
                     closeTimer.Start();
                     return;
                 }
 
-                // Loading text güncelleme
+                // Loading mesajlarını güncelle
                 if (progress < 20) LoadingText.Text = loadingTexts[0];
                 else if (progress < 40) LoadingText.Text = loadingTexts[1];
                 else if (progress < 60) LoadingText.Text = loadingTexts[2];
