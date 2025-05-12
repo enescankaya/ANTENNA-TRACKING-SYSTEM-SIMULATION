@@ -621,20 +621,19 @@
                                 <Grid Height="24" Margin="0,5,0,0">
                                     <ProgressBar x:Name="ConvergenceBar"
                                                 Height="4"
-                                                 Width="150"
-                                                 HorizontalAlignment="Left"
+                                                Width="150"
+                                                HorizontalAlignment="Left"
                                                 Value="0"
                                                 Maximum="100"
-                                                Style="{StaticResource SignalStrengthBarStyle}"
                                                 Foreground="#FF00FF00"
+                                                 Background="Black"
                                                 VerticalAlignment="Center"/>
                                     <TextBlock x:Name="ConvergenceText"
                                              Text="0%"
                                              FontSize="12"
                                              Foreground="#FF00FF00"
                                              HorizontalAlignment="Right"
-                                             VerticalAlignment="Center"
-                                            />
+                                             VerticalAlignment="Center"/>
                                 </Grid>
                             </StackPanel>
 

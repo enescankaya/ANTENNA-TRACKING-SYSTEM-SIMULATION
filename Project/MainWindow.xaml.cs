@@ -1529,36 +1529,27 @@ namespace Project
                 BestPositionH.Text = $"{psoState.BestPosition.H:F1}°";
                 BestPositionV.Text = $"{psoState.BestPosition.V:F1}°";
 
-                // Animasyonlu convergence güncellemesi
-                var animation = new DoubleAnimation(
-                    psoState.ConvergenceRate * 100,
-                    TimeSpan.FromMilliseconds(300))
-                {
-                    EasingFunction = FindResource("EaseOutExpo") as IEasingFunction
-                };
-                ConvergenceBar.BeginAnimation(ProgressBar.ValueProperty, animation);
+                // --- FIX: ConvergenceBar always updates visually ---
+                double convergenceValue = (antennaController?.ConvergenceRate ?? 0) * 100;
+                // Set value directly first
+                ConvergenceBar.Value = convergenceValue;
 
-                // Convergence değerini sistem durumundan al ve animasyonlu güncelle
-                if (antennaController != null)
+                // Animate to new value for smoothness
+                var convergenceAnimation = new DoubleAnimation
                 {
-                    double convergenceValue = antennaController.ConvergenceRate * 100;
-
-                    // Progress bar animasyonu - daha yumuşak
-                    var convergenceAnimation = new DoubleAnimation(
-                        convergenceValue,
-                        TimeSpan.FromMilliseconds(500)) // Süreyi arttır
+                    From = ConvergenceBar.Value,
+                    To = convergenceValue,
+                    Duration = TimeSpan.FromMilliseconds(500),
+                    EasingFunction = new PowerEase
                     {
-                        EasingFunction = new PowerEase
-                        {
-                            Power = 3,
-                            EasingMode = EasingMode.EaseOut
-                        }
-                    };
-                    ConvergenceBar.BeginAnimation(ProgressBar.ValueProperty, convergenceAnimation);
+                        Power = 3,
+                        EasingMode = EasingMode.EaseOut
+                    }
+                };
+                ConvergenceBar.BeginAnimation(ProgressBar.ValueProperty, convergenceAnimation);
 
-                    // Metin güncellemesi
-                    ConvergenceText.Text = $"{convergenceValue:F0}%";
-                }
+                // Metin güncellemesi
+                ConvergenceText.Text = $"{convergenceValue:F0}%";
 
                 SearchAreaText.Text = $"H: {psoState.SearchAreaH:F1}° × V: {psoState.SearchAreaV:F1}°";
                 ParticleCountText.Text = psoState.ParticleCount.ToString();
