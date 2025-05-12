@@ -259,6 +259,7 @@
                 </Canvas>
 
 
+
                 <!-- Toggle Panel Button -->
                 <Grid x:Name="ToggleButtonContainer" 
                       HorizontalAlignment="Right" 
@@ -536,7 +537,7 @@
                       Margin="10">
 
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="80" />
+                        <ColumnDefinition Width="80"/>
                         <!-- Signal Strength için -->
                         <ColumnDefinition Width="200"/>
                         <ColumnDefinition Width="200"/>
@@ -546,7 +547,7 @@
                     <local:SignalStrengthIndicator x:Name="SignalIndicator"
                                                   Grid.Column="0"
                                                   Height="180"
-                                                  Margin="0,0,0,0" VerticalAlignment="Center"/>
+                                                  Margin="0,35,5,0"/>
 
                     <!-- PSO Visualization Panel -->
                     <Border Grid.Column="1"
@@ -564,24 +565,38 @@
                                       Margin="10,10,10,0"
                                       VerticalAlignment="Top"/>
 
+                            <TextBlock x:Name="PsoIterationText"
+                                      Text="Iteration: 0"
+                                      Foreground="#FF808080"
+                                      FontSize="12"
+                                      HorizontalAlignment="Right"
+                                      Margin="0,9,5,0"
+                                      VerticalAlignment="Top"/>
+
                             <!-- Visualization Canvas -->
                             <Canvas x:Name="PsoVisualizationCanvas" 
                                     Width="180" Height="180" 
-                                    Margin="0,20,0,0"
+                                    Margin="0,35,0,0"
                                     ClipToBounds="True">
-                                <!-- Grid Lines -->
-                                <Rectangle Width="180" Height="180" 
-                                          Stroke="#20FFFFFF" 
-                                          StrokeThickness="1"
-                                          StrokeDashArray="4,4"/>
+                                <!-- Grid Lines with labels -->
+                                <Grid>
+                                    <!-- Vertical lines -->
+                                    <Line X1="90" Y1="0" X2="90" Y2="180" 
+                                          Stroke="#40FFFFFF" StrokeThickness="1"/>
+                                    <!-- Horizontal lines -->
+                                    <Line X1="0" Y1="90" X2="180" Y2="90" 
+                                          Stroke="#40FFFFFF" StrokeThickness="1"/>
+                                </Grid>
 
-                                <!-- Axis Labels -->
+                                <!-- Angle labels -->
                                 <TextBlock Text="0°" Foreground="#40FFFFFF" 
-                                          Canvas.Left="5" Canvas.Top="160"/>
-                                <TextBlock Text="360°" Foreground="#40FFFFFF" 
-                                          Canvas.Right="5" Canvas.Top="160"/>
+                                         Canvas.Left="85" Canvas.Top="165"/>
                                 <TextBlock Text="90°" Foreground="#40FFFFFF" 
-                                          Canvas.Left="5" Canvas.Top="5"/>
+                                         Canvas.Left="170" Canvas.Top="85"/>
+                                <TextBlock Text="180°" Foreground="#40FFFFFF" 
+                                         Canvas.Left="85" Canvas.Top="5"/>
+                                <TextBlock Text="270°" Foreground="#40FFFFFF" 
+                                         Canvas.Left="5" Canvas.Top="85"/>
                             </Canvas>
                         </Grid>
                     </Border>

@@ -1424,11 +1424,14 @@ namespace Project
             {
                 PsoVisualizationCanvas.Children.Clear();
 
-                // Grid çizgilerini çiz
-                DrawPsoGrid();
-
                 var psoState = antennaController?.GetPsoState();
                 if (psoState == null) return;
+
+                // Iteration sayısını güncelle
+                PsoIterationText.Text = $"Iteration: {antennaController?.PsoIteration ?? 0}";
+
+                // Grid çizgilerini çiz
+                DrawPsoGrid();
 
                 // Parçacık geçmişini çiz
                 DrawParticleHistory(psoState.BestPositionHistory);
